@@ -16,6 +16,7 @@ import javax.swing.table.DefaultTableModel;
  * @author deislher sánchez funez
  */
 public class Controlador {
+
     private Aplicacion vista;
     private CargadorArchivos cargador;
     private Parser parser;
@@ -62,20 +63,26 @@ public class Controlador {
         try {
             int tamañoTotal = vista.getMemoriaSeleccionada();
             if (tamañoTotal % 4 != 0) {
-                throw new IllegalArgumentException("La memoria total debe ser múltiplo de 4 para dividirla en 25% y 75%.");
+                throw new IllegalArgumentException("La memoria total debe ser múltiplo de 4 para dividirla en 25% y 75%");
             }
-
             List<String[]> instrucciones = cargador.cargarArchivo(archivo.getAbsolutePath());
             int tamañoKernel = tamañoTotal / 4;
-            memoria = new Memoria(tamañoTotal, tamañoKernel);
-            memoria.cargarPrograma(instrucciones);
-            cpu = new CPU(memoria);
-
-            bcp = new BCP(1, 1, memoria.getInicioUsuario(), memoria.getFinPrograma());
+            int tamañoUsuario = tamañoTotal - tamañoKernel;
+            if (instrucciones.isEmpty() || instrucciones.size() > tamañoUsuario) {
+                throw new IllegalArgumentException("El programa debe contener instrucciones y caber en el espacio de usuario.");
+            }
+            Memoria nuevaMemoria = new Memoria(tamañoTotal, tamañoKernel);
+            for (int i = 0; i < instrucciones.size(); i++) {
+                nuevaMemoria.escribirUsuario(tamañoKernel + i, instrucciones.get(i));
+            }
+            int finPrograma = tamañoKernel + instrucciones.size() - 1;
+            memoria = nuevaMemoria;
+            cpu = new CPU();
+            cpu.setPc(tamañoKernel);
+            bcp = new BCP(1, 1, tamañoKernel, finPrograma);
             bcp.setEstadoListo();
             bcp.guardarContexto(cpu);
-            posicionBCP = memoria.guardarBCP(bcp);
-
+            posicionBCP = 0;
             llenarTablaInstrucciones(instrucciones);
             actualizarTablaMemoria();
             actualizarBCP();
@@ -95,13 +102,12 @@ public class Controlador {
             mostrarError("Primero debe cargar un programa.");
             return;
         }
-
         try {
             bcp.setEstadoEjecutando();
-            if (cpu.ejecutarSiguiente()) {
+            if (ejecutarSiguiente()) {
                 bcp.guardarContexto(cpu);
             }
-            if (!cpu.hayInstruccionPendiente()) {
+            if (!hayInstruccionPendiente()) {
                 bcp.setEstadoTerminado();
                 deshabilitarEjecucion();
             }
@@ -112,6 +118,7 @@ public class Controlador {
             bcp.setEstadoBloqueado();
             bcp.guardarContexto(cpu);
             actualizarBCP();
+            actualizarTablaMemoria();
             mostrarError(ex.getMessage());
         }
     }
@@ -125,7 +132,8 @@ public class Controlador {
 
         try {
             bcp.setEstadoEjecutando();
-            cpu.ejecutarTodo();
+            while (ejecutarSiguiente()) {
+            }
             bcp.guardarContexto(cpu);
             bcp.setEstadoTerminado();
             actualizarBCP();
@@ -136,8 +144,28 @@ public class Controlador {
             bcp.setEstadoBloqueado();
             bcp.guardarContexto(cpu);
             actualizarBCP();
+            actualizarTablaMemoria();
             mostrarError(ex.getMessage());
         }
+    }
+
+    /** Ejecuta la instrucción ubicada en el PC actual. */
+    private boolean ejecutarSiguiente() {
+        if (!hayInstruccionPendiente()) {
+            return false;
+        }
+        String[] instruccion = memoria.leer(cpu.getPc());
+        if (instruccion == null) {
+            throw new IllegalStateException("No existe una instrucción en la posición " + cpu.getPc() + ".");
+        }
+        cpu.ejecutarInstruccion(instruccion);
+        cpu.avanzarPc();
+        return true;
+    }
+
+    /** Indica si el PC se encuentra dentro del programa cargado. */
+    private boolean hayInstruccionPendiente() {
+        return cpu.getPc() >= bcp.getInicioMemoria() && cpu.getPc() <= bcp.getFinMemoria();
     }
 
     /** Llena la tabla con las instrucciones en formato ensamblador. */
@@ -149,6 +177,42 @@ public class Controlador {
         }
     }
 
+    /** Escribe los atributos del BCP en el kernel. */
+    private void escribirBCPEnMemoria() {
+        String[] nombres = {
+            "idProceso",
+            "estado",
+            "prioridad",
+            "pc",
+            "inicioMemoria",
+            "finMemoria",
+            "ir",
+            "ac",
+            "ax",
+            "bx",
+            "cx",
+            "dx",
+            "punteroPila",
+            "cpuActual",
+            "tiempoInicio",
+            "tiempoFinal",
+            "tiempoEmpleadoSegundos",
+            "direccionSiguienteBCP"
+        };
+        String[] valores = {String.valueOf(bcp.getIdProceso()), bcp.getEstado(),
+            String.valueOf(bcp.getPrioridad()), String.valueOf(bcp.getPc()),
+            String.valueOf(bcp.getInicioMemoria()), String.valueOf(bcp.getFinMemoria()),
+            bcp.getIrToString(), String.valueOf(bcp.getAc()), String.valueOf(bcp.getAx()),
+            String.valueOf(bcp.getBx()), String.valueOf(bcp.getCx()), bcp.getDx(),
+            String.valueOf(bcp.getPunteroPila()), String.valueOf(bcp.getCpuActual()),
+            String.valueOf(bcp.getTiempoInicio()), String.valueOf(bcp.getTiempoFinal()),
+            String.valueOf(bcp.getTiempoEmpleadoSegundos()), String.valueOf(bcp.getDireccionSiguienteBCP())
+        };
+        for (int i = 0; i < 18; i++) {
+            memoria.escribirKernel(posicionBCP + i, nombres[i], valores[i]);
+        }
+    }
+
     /** Actualiza la tabla que representa todas las posiciones de memoria. */
     private void actualizarTablaMemoria() {
         DefaultTableModel modelo = vista.getModeloMemoria();
@@ -156,16 +220,21 @@ public class Controlador {
         if (memoria == null) {
             return;
         }
-
+        escribirBCPEnMemoria();
         for (int posicion = 0; posicion < memoria.getTamañoTotal(); posicion++) {
             String contenido = "";
-            if (!memoria.esDireccionKernel(posicion)) {
+            if (memoria.esDireccionKernel(posicion)) {
+                String[] atributo = memoria.leer(posicion);
+                if (atributo != null) {
+                    contenido = atributo[0] + ": " + atributo[1];
+                }
+            } else {
                 String[] instruccion = memoria.leer(posicion);
                 if (instruccion != null) {
                     contenido = parser.traducirInstruccion(instruccion);
                 }
             }
-            modelo.addRow(new Object[]{posicion, contenido});
+            modelo.addRow(new Object[] { posicion, contenido });
         }
     }
 
@@ -196,12 +265,12 @@ public class Controlador {
      * Resalta en ambas tablas la instrucción señalada actualmente por el PC.
      */
     private void actualizarSeleccionProximaInstruccion() {
-        if (cpu == null || memoria == null || !cpu.hayInstruccionPendiente()) {
+        if (cpu == null || memoria == null || bcp == null || !hayInstruccionPendiente()) {
             vista.limpiarSeleccionTablas();
             return;
         }
         int posicionMemoria = cpu.getPc();
-        int filaInstruccion = posicionMemoria - memoria.getInicioUsuario();
+        int filaInstruccion = posicionMemoria - bcp.getInicioMemoria();
         vista.seleccionarProximaInstruccion(filaInstruccion, posicionMemoria);
     }
 

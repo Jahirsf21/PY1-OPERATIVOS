@@ -173,6 +173,7 @@ public class BCP {
         return direccionSiguienteBCP;
     }
 
+
     /**
      * Obtiene la instrucción guardada en el IR con formato ensamblador legible.
      *
@@ -182,7 +183,6 @@ public class BCP {
     public String getIrToString() {
         return new Parser().traducirInstruccion(ir);
     }
-
 
     /** Establece el estado del proceso como {@code NUEVO}. */
     public void setEstadoNuevo() {
