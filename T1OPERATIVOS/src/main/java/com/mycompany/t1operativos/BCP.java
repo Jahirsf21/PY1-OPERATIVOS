@@ -1,5 +1,7 @@
 package com.mycompany.t1operativos;
 
+import java.time.LocalDateTime;
+
 /**
  * Representa el Bloque de Control de Proceso (BCP) de un programa.
  *
@@ -20,8 +22,14 @@ public class BCP {
     private int ax;
     private int bx;
     private int cx;
-    private int dx;
-    private int instruccionesEjecutadas;
+    private String dx;
+    private int[] pila;
+    private int punteroPila;
+    private int cpuActual;
+    private LocalDateTime tiempoInicio;
+    private LocalDateTime tiempoFinal;
+    private long tiempoEmpleadoSegundos;
+    private int direccionSiguienteBCP;
 
     /**
      * Construye un BCP para un proceso nuevo e inicializa sus registros en cero.
@@ -43,8 +51,14 @@ public class BCP {
         this.ax = 0;
         this.bx = 0;
         this.cx = 0;
-        this.dx = 0;
-        this.instruccionesEjecutadas = 0;
+        this.dx = "";
+        this.pila = new int[5];
+        this.punteroPila = -1;
+        this.cpuActual = -1;
+        this.tiempoInicio = null;
+        this.tiempoFinal = null;
+        this.tiempoEmpleadoSegundos = 0;
+        this.direccionSiguienteBCP = -1;
     }
 
     /**
@@ -73,11 +87,90 @@ public class BCP {
         this.dx = cpu.getDx();
     }
 
-    /**
-     * Incrementa en uno la cantidad de instrucciones ejecutadas por el proceso.
-     */
-    public void aumentarInstruccionesEjecutadas() {
-        instruccionesEjecutadas++;
+    /** Guarda un valor en la pila del proceso. */
+    public void apilar(int valor) {
+        if (punteroPila >= pila.length - 1) {
+            throw new IllegalStateException("Desbordamiento de pila: capacidad máxima de 5 valores.");
+        }
+        pila[++punteroPila] = valor;
+    }
+
+    /** Retira el último valor de la pila del proceso. */
+    public int desapilar() {
+        if (punteroPila < 0) {
+            throw new IllegalStateException("La pila está vacía.");
+        }
+        int valor = pila[punteroPila];
+        pila[punteroPila--] = 0;
+        return valor;
+    }
+
+    /** @return una copia de los valores presentes en la pila. */
+    public int[] getPila() {
+        int[] valores = new int[punteroPila + 1];
+        System.arraycopy(pila, 0, valores, 0, punteroPila + 1);
+        return valores;
+    }
+
+    /** @return la cantidad de valores presentes en la pila. */
+    public int getCantidadEnPila() {
+        return punteroPila + 1;
+    }
+
+    /** @return la posición del último valor en la pila. */
+    public int getPunteroPila() {
+        return punteroPila;
+    }
+
+    /** @return la capacidad máxima de la pila. */
+    public int getCapacidadPila() {
+        return pila.length;
+    }
+
+    /** Asigna el identificador de la CPU en la que se ejecuta el proceso. */
+    public void setCpuActual(int cpuActual) {
+        if (cpuActual < 0) {
+            throw new IllegalArgumentException("El identificador de CPU no puede ser negativo.");
+        }
+        this.cpuActual = cpuActual;
+    }
+
+    /** @return el identificador de CPU, o -1 si aún no se ha asignado. */
+    public int getCpuActual() {
+        return cpuActual;
+    }
+
+    /** Registra un segundo simulado de uso de CPU. */
+    public void aumentarTiempoEmpleado() {
+        tiempoEmpleadoSegundos++;
+    }
+
+    /** @return el tiempo simulado de CPU consumido, en segundos. */
+    public long getTiempoEmpleadoSegundos() {
+        return tiempoEmpleadoSegundos;
+    }
+
+    /** @return la fecha y hora de la primera ejecución, o null si aún no inició. */
+    public LocalDateTime getTiempoInicio() {
+        return tiempoInicio;
+    }
+
+    /** @return la fecha y hora de finalización, o null si aún no terminó. */
+    public LocalDateTime getTiempoFinal() {
+        return tiempoFinal;
+    }
+
+    /** Enlaza este BCP con la dirección en memoria del siguiente BCP. */
+    public void setDireccionSiguienteBCP(int direccion) {
+        if (direccion < -1) {
+            throw new IllegalArgumentException("La dirección del siguiente BCP no es válida.");
+        }
+        direccionSiguienteBCP = direccion;
+    }
+
+    /** @return la dirección del siguiente BCP, o -1 si no hay otro. */
+    public int getDireccionSiguienteBCP() {
+        return direccionSiguienteBCP;
     }
 
     /**
@@ -87,13 +180,7 @@ public class BCP {
      *     una instrucción guardada.
      */
     public String getIrToString() {
-        if (ir == null) {
-            return "";
-        }
-        if ("MOV".equals(ir[0])) {
-            return ir[0] + " " + ir[1] + ", " + ir[2];
-        }
-        return ir[0] + " " + ir[1];
+        return new Parser().traducirInstruccion(ir);
     }
 
 
@@ -108,19 +195,35 @@ public class BCP {
         this.estado = "LISTO";
     }
 
-    /** Establece el estado del proceso como {@code EJECUTANDO}. */
+    /** Establece el estado como EJECUTANDO y registra el primer inicio. */
     public void setEstadoEjecutando() {
         this.estado = "EJECUTANDO";
+        if (tiempoInicio == null) {
+            tiempoInicio = LocalDateTime.now();
+        }
     }
 
-    /** Establece el estado del proceso como {@code BLOQUEADO}. */
+    /** Establece el estado del proceso como EN_ESPERA. */
     public void setEstadoBloqueado() {
-        this.estado = "BLOQUEADO";
+        this.estado = "EN_ESPERA";
     }
 
-    /** Establece el estado del proceso como {@code TERMINADO}. */
+    /** Establece el estado del proceso como SUSPENDIDO. */
+    public void setEstadoSuspendido() {
+        this.estado = "SUSPENDIDO";
+    }
+
+    /** Establece el estado del proceso como LISTO_SUSPENDIDO. */
+    public void setEstadoListoSuspendido() {
+        this.estado = "LISTO_SUSPENDIDO";
+    }
+
+    /** Establece el estado como TERMINADO y registra su finalización. */
     public void setEstadoTerminado() {
         this.estado = "TERMINADO";
+        if (tiempoFinal == null) {
+            tiempoFinal = LocalDateTime.now();
+        }
     }
 
     /** @return el identificador del proceso. */
@@ -151,6 +254,16 @@ public class BCP {
     /** @return la última posición de memoria asignada al proceso. */
     public int getFinMemoria() {
         return finMemoria;
+    }
+
+    /** @return la dirección base del programa en memoria. */
+    public int getBase() {
+        return inicioMemoria;
+    }
+
+    /** @return el tamaño del programa, incluyendo ambas direcciones límite. */
+    public int getAlcance() {
+        return finMemoria - inicioMemoria + 1;
     }
 
     /**
@@ -186,14 +299,9 @@ public class BCP {
         return cx;
     }
     
-    /** @return el valor guardado del registro DX. */
-    public int getDx() {
+    /** @return el contenido guardado del registro DX. */
+    public String getDx() {
         return dx;
-    }
-    
-    /** @return la cantidad de instrucciones ejecutadas por el proceso. */
-    public int getInstruccionesEjecutadas() {
-        return instruccionesEjecutadas;
     }
     
 }

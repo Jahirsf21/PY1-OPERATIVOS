@@ -69,7 +69,7 @@ public class Controlador {
             int tamañoKernel = tamañoTotal / 4;
             memoria = new Memoria(tamañoTotal, tamañoKernel);
             memoria.cargarPrograma(instrucciones);
-            cpu = new CPU(memoria, parser);
+            cpu = new CPU(memoria);
 
             bcp = new BCP(1, 1, memoria.getInicioUsuario(), memoria.getFinPrograma());
             bcp.setEstadoListo();
@@ -99,7 +99,6 @@ public class Controlador {
         try {
             bcp.setEstadoEjecutando();
             if (cpu.ejecutarSiguiente()) {
-                bcp.aumentarInstruccionesEjecutadas();
                 bcp.guardarContexto(cpu);
             }
             if (!cpu.hayInstruccionPendiente()) {
@@ -126,9 +125,7 @@ public class Controlador {
 
         try {
             bcp.setEstadoEjecutando();
-            while (cpu.ejecutarSiguiente()) {
-                bcp.aumentarInstruccionesEjecutadas();
-            }
+            cpu.ejecutarTodo();
             bcp.guardarContexto(cpu);
             bcp.setEstadoTerminado();
             actualizarBCP();
@@ -191,8 +188,7 @@ public class Controlador {
                 + "\nAX: " + bcp.getAx()
                 + "\nBX: " + bcp.getBx()
                 + "\nCX: " + bcp.getCx()
-                + "\nDX: " + bcp.getDx()
-                + "\nInstrucciones: " + bcp.getInstruccionesEjecutadas();
+                + "\nDX: " + bcp.getDx();
         vista.mostrarBCP(texto);
     }
 

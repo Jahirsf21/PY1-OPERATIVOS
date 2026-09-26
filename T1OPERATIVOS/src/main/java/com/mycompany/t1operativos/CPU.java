@@ -11,28 +11,25 @@ package com.mycompany.t1operativos;
  */
 public class CPU {
     private Memoria memoria;
-    private Parser parser;
     private int pc;
     private String[] ir;
     private int ac;
     private int ax;
     private int bx;
     private int cx;
-    private int dx;
+    private String dx;
 
     /**
      * Construye una CPU asociada a la memoria indicada e inicializa sus
      * registros en cero.
      *
      * @param memoria memoria de la que se obtendrán las instrucciones.
-     * @param parser parser utilizado para dar formato legible a las instrucciones
      * @throws IllegalArgumentException si la memoria es {@code null}.
      */
-    public CPU(Memoria memoria, Parser parser) {
+    public CPU(Memoria memoria) {
         if (memoria == null) {
             throw new IllegalArgumentException("La memoria no puede ser nula.");
         }
-        this.parser = parser;
         this.memoria = memoria;
         reiniciar();
     }
@@ -91,9 +88,18 @@ public class CPU {
         }
         String operador = ir[0];
         String registro = ir[1];
-        int valor = Integer.parseInt(ir[2]);
         switch (operador) {
             case "MOV":
+                String origen = ir[2];
+                if ("DX".equals(registro) && "DX".equals(origen)) {
+                    break;
+                }
+                int valor;
+                if (new Parser().validarRegistro(origen)) {
+                    valor = leerRegistro(origen);
+                } else {
+                    valor = Integer.parseInt(origen);
+                }
                 escribirRegistro(registro, valor);
                 break;
             case "LOAD":
@@ -127,7 +133,11 @@ public class CPU {
             case "CX":
                 return cx;
             case "DX":
-                return dx;
+                try {
+                    return Integer.parseInt(dx);
+                } catch (NumberFormatException e) {
+                    throw new IllegalStateException("DX contiene texto y no puede usarse como número: " + dx);
+                }
             default:
                 throw new IllegalArgumentException("Registro desconocido: " + registro);
         }
@@ -152,7 +162,7 @@ public class CPU {
                 cx = valor;
                 break;
             case "DX":
-                dx = valor;
+                dx = Integer.toString(valor);
                 break;
             default:
                 throw new IllegalArgumentException("Registro desconocido: " + registro);
@@ -182,7 +192,7 @@ public class CPU {
         ax = 0;
         bx = 0;
         cx = 0;
-        dx = 0;
+        dx = "";
     }
 
     /**
@@ -192,7 +202,7 @@ public class CPU {
      *     una instrucción cargada.
      */
     public String getIrToString() {
-        return parser.traducirInstruccion(ir);
+        return new Parser().traducirInstruccion(ir);
     }
 
     /** @return el valor actual del contador de programa (PC). */
@@ -228,9 +238,17 @@ public class CPU {
         return cx;
     }
 
-    /** @return el valor actual del registro DX. */
-    public int getDx() {
+    /** @return el contenido actual del registro DX. */
+    public String getDx() {
         return dx;
+    }
+
+    /** Asigna texto a DX  */
+    public void setDx(String valor) {
+        if (valor == null) {
+            throw new IllegalArgumentException("DX no puede ser nulo.");
+        }
+        dx = valor;
     }
 
 }
