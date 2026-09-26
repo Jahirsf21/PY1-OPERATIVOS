@@ -143,15 +143,12 @@ public class Controlador {
         }
     }
 
-    /** Llena la tabla con las instrucciones normales y su traducción binaria. */
+    /** Llena la tabla con las instrucciones en formato ensamblador. */
     private void llenarTablaInstrucciones(List<String[]> instrucciones) {
         DefaultTableModel modelo = vista.getModeloInstrucciones();
         modelo.setRowCount(0);
         for (String[] instruccion : instrucciones) {
-            modelo.addRow(new Object[]{
-                parser.traducirInstruccion(instruccion),
-                parser.traducirInstruccionABinario(instruccion)
-            });
+            modelo.addRow(new Object[]{parser.traducirInstruccion(instruccion)});
         }
     }
 

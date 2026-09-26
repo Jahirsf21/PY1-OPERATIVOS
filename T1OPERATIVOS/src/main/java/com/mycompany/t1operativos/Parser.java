@@ -144,34 +144,6 @@ public class Parser {
     }
 
     /**
-     * Obtiene el código binario de cuatro bits asociado a un operador.
-     *
-     * @param operador operador que se desea convertir.
-     * @return el código binario del operador, o una cadena vacía si no existe.
-     */
-    public String convertirOperadorABinario(String operador) {
-        String resultado = "";
-        switch (operador) {
-            case "LOAD":
-                resultado = "0001";
-                break;
-            case "STORE":
-                resultado = "0010";
-                break;
-            case "MOV":
-                resultado = "0011";
-                break;
-            case "SUB":
-                resultado = "0100";
-                break;
-            case "ADD":
-                resultado = "0101";
-                break;
-        }
-        return resultado;
-    }
-
-    /**
      * Comprueba si un registro es reconocido por la Mini PC.
      *
      * @param registro registro que se desea comprobar.
@@ -187,63 +159,6 @@ public class Parser {
             default:
                 return false;
         }
-    }
-
-    /**
-     * Obtiene el código binario de cuatro bits asociado a un registro.
-     *
-     * @param registro registro que se desea convertir.
-     * @return el código binario del registro, o una cadena vacía si no existe.
-     */
-    public String convertirRegistroABinario(String registro) {
-        String resultado = "";
-        switch (registro) {
-            case "AX":
-                resultado = "0001";
-                break;
-            case "BX":
-                resultado = "0010";
-                break;
-            case "CX":
-                resultado = "0011";
-                break;
-            case "DX":
-                resultado = "0100";
-                break;
-        }
-        return resultado;
-    }
-
-    /**
-     * Convierte un número decimal a una representación de ocho bits formada por un bit de signo y siete bits para su magnitud.
-     *
-     * @param numero número decimal que se desea convertir.
-     * @return la representación binaria de ocho bits del número.
-     */
-    public String convertirDecimalABinario(int numero) {
-        boolean esNegativo = false;
-        String resultado = "";
-        if (numero == 0) {
-            return "00000000";
-        }
-        if (numero < 0) {
-            numero = Math.abs(numero);
-            esNegativo = true;
-        }
-        while (numero > 0) {
-            int residuo = numero % 2;
-            resultado = Integer.toString(residuo) + resultado;
-            numero = numero / 2;
-        }
-        while (resultado.length() < 7) {
-            resultado = "0" + resultado;
-        }
-        if (esNegativo) {
-            resultado = "1" + resultado;
-        } else {
-            resultado = "0" + resultado;
-        }
-        return resultado;
     }
 
     /**
@@ -269,20 +184,6 @@ public class Parser {
             return new ResultadoParser(false, null, error);
         }
         return new ResultadoParser(false, null, "Formato inválido: se esperaba \"OPERADOR REGISTRO\" o \"OPERADOR REGISTRO, VALOR\".");
-    }
-
-    /**
-     * Traduce una instrucción procesada a su representación binaria.
-     *
-     * @param instruccion arreglo con el operador, el registro y el valor.
-     * @return la instrucción binaria con sus campos separados por espacios.
-     */
-    public String traducirInstruccionABinario(String[] instruccion) {
-        String operador = convertirOperadorABinario(instruccion[0]);
-        String registro = convertirRegistroABinario(instruccion[1]);
-        String valor = convertirDecimalABinario(Integer.parseInt(instruccion[2]));
-        String resultado = operador + " " + registro + " " + valor;
-        return resultado;
     }
 
     /**

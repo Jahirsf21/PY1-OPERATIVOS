@@ -12,8 +12,7 @@ import java.io.File;
  * Ventana principal de la aplicación Mini PC.
  *
  * Contiene los controles para cargar archivos ensamblador (.asm), ejecutarlos,
- * y visualizar el resultado de la simulación en dos tablas: instrucciones
- * traducidas a binario y el estado de la memoria.
+ * y visualizar el resultado de la simulación en dos tablas: instrucciones ensamblador y el estado de la memoria.
  *
  * @author deislher sánchez funez
  */
@@ -101,7 +100,7 @@ public class Aplicacion extends JFrame {
 
     /**
      * Crea el panel central con las dos tablas de la simulación:
-     * instrucciones (columnas Instrucción/Representacion en Binario de la instrucción) a la izquierda,
+     * instrucciones (columna Instrucción) a la izquierda,
      * memoria (columnas Posición/Valor en memoria) a la derecha.
      * Ambas tablas se configuran como de solo lectura, sin reordenamiento de columnas ni selección de celdas.
      *
@@ -112,7 +111,7 @@ public class Aplicacion extends JFrame {
         JPanel panel = new JPanel(new GridLayout(1, 2, 10, 0));
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        modeloInstrucciones = new DefaultTableModel(new Object[]{"Instrucción", "Binario"}, 0) {
+        modeloInstrucciones = new DefaultTableModel(new Object[]{"Instrucción"}, 0) {
             @Override
             public boolean isCellEditable(int row, int col) {
                 return false;
