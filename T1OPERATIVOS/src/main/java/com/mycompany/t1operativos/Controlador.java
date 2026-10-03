@@ -3,8 +3,10 @@ package com.mycompany.t1operativos;
 import com.mycompany.t1operativos.gui.Aplicacion;
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import javax.swing.JOptionPane;
+import javax.swing.Timer;
 import javax.swing.table.DefaultTableModel;
 
 /**
@@ -24,6 +26,7 @@ public class Controlador {
     private CPU cpu;
     private BCP bcp;
     private int posicionBCP;
+    private Timer ejecucionAutomatica;
 
     /**
      * Construye el controlador y registra los eventos de la interfaz.
@@ -38,6 +41,7 @@ public class Controlador {
         this.cargador = new CargadorArchivos();
         this.parser = new Parser();
         this.posicionBCP = -1;
+        this.ejecucionAutomatica = new Timer(25, e -> ejecutarPaso());
         registrarEventos();
     }
 
@@ -66,6 +70,10 @@ public class Controlador {
                 throw new IllegalArgumentException("La memoria total debe ser múltiplo de 4 para dividirla en 25% y 75%");
             }
             List<String[]> instrucciones = cargador.cargarArchivo(archivo.getAbsolutePath());
+            List<String> errores = cargador.getErrores();
+            if (!errores.isEmpty()) {
+                throw new IllegalArgumentException("No se cargó el archivo porque contiene errores:\n\n" + String.join("\n", errores));
+            }
             int tamañoKernel = tamañoTotal / 4;
             int tamañoUsuario = tamañoTotal - tamañoKernel;
             if (instrucciones.isEmpty() || instrucciones.size() > tamañoUsuario) {
@@ -90,7 +98,6 @@ public class Controlador {
             vista.setSelectorMemoriaHabilitado(false);
             vista.setControlesProgramaHabilitados(true);
             vista.setTitle("Mini PC - " + archivo.getName());
-            mostrarErroresCarga(cargador.getErrores());
         } catch (IOException | IllegalArgumentException | IllegalStateException ex) {
             mostrarError(ex.getMessage());
         }
@@ -119,34 +126,23 @@ public class Controlador {
             bcp.guardarContexto(cpu);
             actualizarBCP();
             actualizarTablaMemoria();
+            actualizarSeleccionProximaInstruccion();
+            deshabilitarEjecucion();
             mostrarError(ex.getMessage());
         }
     }
 
-    /** Ejecuta todas las instrucciones pendientes y muestra el contexto final. */
+    /** Ejecuta automáticamente todas las instrucciones pendientes hasta finalizar. */
     private void ejecutarTodo() {
         if (cpu == null || bcp == null) {
             mostrarError("Primero debe cargar un programa.");
             return;
         }
-
-        try {
-            bcp.setEstadoEjecutando();
-            while (ejecutarSiguiente()) {
-            }
-            bcp.guardarContexto(cpu);
-            bcp.setEstadoTerminado();
-            actualizarBCP();
-            actualizarTablaMemoria();
-            actualizarSeleccionProximaInstruccion();
-            deshabilitarEjecucion();
-        } catch (IllegalArgumentException | IllegalStateException ex) {
-            bcp.setEstadoBloqueado();
-            bcp.guardarContexto(cpu);
-            actualizarBCP();
-            actualizarTablaMemoria();
-            mostrarError(ex.getMessage());
-        }
+        vista.getBtnEjecutar().setEnabled(false);
+        vista.getBtnPasoAPaso().setEnabled(false);
+        vista.getBtnCargarArchivo().setEnabled(false);
+        vista.getBtnLimpiar().setEnabled(false);
+        ejecucionAutomatica.start();
     }
 
     /** Ejecuta la instrucción ubicada en el PC actual. */
@@ -158,9 +154,52 @@ public class Controlador {
         if (instruccion == null) {
             throw new IllegalStateException("No existe una instrucción en la posición " + cpu.getPc() + ".");
         }
-        cpu.ejecutarInstruccion(instruccion);
-        cpu.avanzarPc();
+        cpu.cargarInstruccion(instruccion);
+        int siguientePc = cpu.getPc() + 1;
+        switch (instruccion[0]) {
+            case "JMP":
+                siguientePc = calcularDestinoSalto(Integer.parseInt(instruccion[1]));
+                break;
+            case "JE":
+                if (cpu.esIgual()) {
+                    siguientePc = calcularDestinoSalto(Integer.parseInt(instruccion[1]));
+                }
+                break;
+            case "JNE":
+                if (!cpu.esIgual()) {
+                    siguientePc = calcularDestinoSalto(Integer.parseInt(instruccion[1]));
+                }
+                break;
+            case "PARAM":
+                int cantidad = instruccion.length - 1;
+                if (bcp.getCantidadEnPila() + cantidad > bcp.getCapacidadPila()) {
+                    throw new IllegalStateException("Desbordamiento de pila: no hay espacio para los " + cantidad + " parámetros. Capacidad máxima de 5 valores.");
+                }
+                for (int i = 1; i < instruccion.length; i++) {
+                    bcp.apilar(Integer.parseInt(instruccion[i]));
+                }
+                break;
+            case "PUSH":
+                bcp.apilar(cpu.leerRegistro(instruccion[1]));
+                break;
+            case "POP":
+                cpu.escribirRegistro(instruccion[1], bcp.desapilar());
+                break;
+            default:
+                cpu.ejecutarInstruccion(instruccion);
+                break;
+        }
+        cpu.setPc(siguientePc);
         return true;
+    }
+
+    /** Calcula un salto relativo al PC actual y protege los límites del proceso. */
+    private int calcularDestinoSalto(int desplazamiento) {
+        long destino = (long) cpu.getPc() + desplazamiento;
+        if (destino < bcp.getInicioMemoria() || destino > bcp.getFinMemoria()) {
+            throw new IllegalStateException("Salto fuera de los límites del programa: dirección " + destino + ". Rango permitido: " + bcp.getInicioMemoria() + " a " + bcp.getFinMemoria() + ".");
+        }
+        return (int) destino;
     }
 
     /** Indica si el PC se encuentra dentro del programa cargado. */
@@ -192,6 +231,8 @@ public class Controlador {
             "bx",
             "cx",
             "dx",
+            "flag",
+            "pila",
             "punteroPila",
             "cpuActual",
             "tiempoInicio",
@@ -204,11 +245,12 @@ public class Controlador {
             String.valueOf(bcp.getInicioMemoria()), String.valueOf(bcp.getFinMemoria()),
             bcp.getIrToString(), String.valueOf(bcp.getAc()), String.valueOf(bcp.getAx()),
             String.valueOf(bcp.getBx()), String.valueOf(bcp.getCx()), bcp.getDx(),
+            String.valueOf(bcp.esIgual()), Arrays.toString(bcp.getPila()),
             String.valueOf(bcp.getPunteroPila()), String.valueOf(bcp.getCpuActual()),
             String.valueOf(bcp.getTiempoInicio()), String.valueOf(bcp.getTiempoFinal()),
             String.valueOf(bcp.getTiempoEmpleadoSegundos()), String.valueOf(bcp.getDireccionSiguienteBCP())
         };
-        for (int i = 0; i < 18; i++) {
+        for (int i = 0; i < nombres.length; i++) {
             memoria.escribirKernel(posicionBCP + i, nombres[i], valores[i]);
         }
     }
@@ -257,7 +299,10 @@ public class Controlador {
                 + "\nAX: " + bcp.getAx()
                 + "\nBX: " + bcp.getBx()
                 + "\nCX: " + bcp.getCx()
-                + "\nDX: " + bcp.getDx();
+                + "\nDX: " + bcp.getDx()
+                + "\nFlag: " + bcp.esIgual()
+                + "\nPila: " + Arrays.toString(bcp.getPila())
+                + "\nPuntero pila: " + bcp.getPunteroPila();
         vista.mostrarBCP(texto);
     }
 
@@ -276,6 +321,7 @@ public class Controlador {
 
     /** Elimina el programa y permite seleccionar una nueva memoria. */
     private void limpiar() {
+        ejecucionAutomatica.stop();
         memoria = null;
         cpu = null;
         bcp = null;
@@ -291,6 +337,8 @@ public class Controlador {
 
     /** Deshabilita los botones cuando el proceso ya no puede continuar. */
     private void deshabilitarEjecucion() {
+        ejecucionAutomatica.stop();
+        vista.getBtnCargarArchivo().setEnabled(true);
         vista.getBtnEjecutar().setEnabled(false);
         vista.getBtnPasoAPaso().setEnabled(false);
         vista.getBtnLimpiar().setEnabled(true);
@@ -301,17 +349,4 @@ public class Controlador {
         JOptionPane.showMessageDialog(vista, mensaje, "Error", JOptionPane.ERROR_MESSAGE);
     }
 
-    /**
-     * Informa las líneas omitidas cuando un archivo se carga parcialmente.
-     *
-     * @param errores errores encontrados durante la carga.
-     */
-    private void mostrarErroresCarga(List<String> errores) {
-        if (errores.isEmpty()) {
-            return;
-        }
-        String mensaje = "El archivo se cargó, pero se omitieron estas líneas:\n\n"
-                + String.join("\n", errores);
-        JOptionPane.showMessageDialog(vista, mensaje, "Carga parcial", JOptionPane.WARNING_MESSAGE);
-    }
 }

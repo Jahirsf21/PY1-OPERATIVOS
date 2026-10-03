@@ -16,25 +16,31 @@ public class CPU {
     private int bx;
     private int cx;
     private String dx;
+    private boolean flag;
 
     /** Construye una CPU e inicializa sus registros. */
     public CPU() {
         reiniciar();
     }
 
-    /** Ejecuta una instrucción validada por el parser y cargada por el controlador. */
-    public void ejecutarInstruccion(String[] instruccion) {
+    /** Carga en el IR la instrucción que se va a ejecutar. */
+    public void cargarInstruccion(String[] instruccion) {
         if (instruccion == null || instruccion.length == 0) {
             throw new IllegalArgumentException("La instrucción no puede ser nula ni vacía.");
         }
         ir = instruccion.clone();
+    }
+
+    /** Ejecuta una instrucción validada por el parser y cargada por el controlador. */
+    public void ejecutarInstruccion(String[] instruccion) {
+        cargarInstruccion(instruccion);
         String operador = ir[0];
         switch (operador) {
             case "MOV":
                 String registro = ir[1];
                 String origen = ir[2];
                 if ("DX".equals(registro) && "DX".equals(origen)) {
-                    return;
+                    break;
                 }
                 int valor = esRegistro(origen) ? leerRegistro(origen) : Integer.parseInt(origen);
                 escribirRegistro(registro, valor);
@@ -71,6 +77,9 @@ public class CPU {
                 escribirRegistro(ir[1], segundoValor);
                 escribirRegistro(ir[2], primerValor);
                 break;
+            case "CMP":
+                flag = leerRegistro(ir[1]) == leerRegistro(ir[2]);
+                break;
             default:
                 throw new IllegalArgumentException("La instrucción " + operador + " todavía no está implementada en la CPU.");
         }
@@ -82,7 +91,7 @@ public class CPU {
     }
 
     /** Lee el valor de un registro. */
-    private int leerRegistro(String registro) {
+    public int leerRegistro(String registro) {
         switch (registro) {
             case "AX":
                 return ax;
@@ -102,7 +111,7 @@ public class CPU {
     }
 
     /** Almacena un valor en un registro. */
-    private void escribirRegistro(String registro, int valor) {
+    public void escribirRegistro(String registro, int valor) {
         switch (registro) {
             case "AX":
                 ax = valor;
@@ -135,6 +144,7 @@ public class CPU {
         bx = 0;
         cx = 0;
         dx = "";
+        flag = false;
     }
 
     /** @return el valor actual del contador de programa. */
@@ -152,7 +162,10 @@ public class CPU {
 
     /** @return la instrucción actual. */
     public String[] getIr() {
-        return ir == null ? null : ir.clone();
+        if (ir == null) {
+            return null;
+        }
+        return ir.clone();
     }
 
     /** @return el valor actual del acumulador. */
@@ -178,6 +191,11 @@ public class CPU {
     /** @return el contenido actual de DX. */
     public String getDx() {
         return dx;
+    }
+
+    /** @return si los registros de la última comparación eran iguales. */
+    public boolean esIgual() {
+        return flag;
     }
 
     /** Asigna texto a DX. */

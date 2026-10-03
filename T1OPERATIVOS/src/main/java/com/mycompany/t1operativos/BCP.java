@@ -23,6 +23,7 @@ public class BCP {
     private int bx;
     private int cx;
     private String dx;
+    private boolean flag;
     private int[] pila;
     private int punteroPila;
     private int cpuActual;
@@ -52,6 +53,7 @@ public class BCP {
         this.bx = 0;
         this.cx = 0;
         this.dx = "";
+        this.flag = false;
         this.pila = new int[5];
         this.punteroPila = -1;
         this.cpuActual = -1;
@@ -85,6 +87,7 @@ public class BCP {
         this.bx = cpu.getBx();
         this.cx = cpu.getCx();
         this.dx = cpu.getDx();
+        this.flag = cpu.esIgual();
     }
 
     /** Guarda un valor en la pila del proceso. */
@@ -302,6 +305,11 @@ public class BCP {
     /** @return el contenido guardado del registro DX. */
     public String getDx() {
         return dx;
+    }
+
+    /** @return si los registros de la última comparación guardada eran iguales. */
+    public boolean esIgual() {
+        return flag;
     }
     
 }
