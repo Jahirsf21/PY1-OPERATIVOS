@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * Carga archivos ensamblador con extensión {@code .asm} y convierte cada línea
- * en una instrucción validada mediante el {@link Parser}
+ * en una instrucción validada mediante el {@link Parser}.
  *
  * @author deislher sánchez funez
  */
@@ -16,6 +16,9 @@ public class CargadorArchivos {
     private Parser parser;
     private List<String> errores;
 
+    /**
+     * Construye el cargador de archivos ensamblador.
+     */
     public CargadorArchivos() {
         this.parser = new Parser();
         this.errores = new ArrayList<>();
@@ -27,7 +30,7 @@ public class CargadorArchivos {
      * sus errores quedan disponibles mediante {@link #getErrores()}.
      *
      * @param rutaArchivo ruta del archivo {@code .asm} que se desea cargar.
-     * @return una lista con las instrucciones procesadas; cada arreglo contiene el operador, el registro y el valor.
+     * @return una lista con las instrucciones válidas procesadas.
      * @throws IOException si ocurre un error al abrir o leer el archivo.
      * @throws IllegalArgumentException si la ruta es inválida, el archivo no tiene extensión {@code .asm} o no contiene instrucciones válidas.
      */

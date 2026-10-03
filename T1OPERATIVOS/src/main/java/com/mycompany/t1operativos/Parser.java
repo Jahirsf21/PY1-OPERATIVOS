@@ -13,8 +13,8 @@ public class Parser {
      * Convierte una instrucción simple a un arreglo de tres elementos.
      * El valor de una instrucción simple se establece en cero.
      *
-     * @param instruccion arreglo que contiene la operación y el registro.
-     * @return un arreglo con el operador, el registro y el valor {@code "0"}.
+     * @param instruccion arreglo que contiene la operación y el operando.
+     * @return un arreglo con el operador, el operando y el valor {@code "0"}.
      */
     public String[] procesarInstruccionSimple(String[] instruccion) {
         String[] resultado = new String[3];
@@ -41,12 +41,22 @@ public class Parser {
         return resultado;
     }
 
-    /** Convierte INC o DEC sin registro a un arreglo de tres elementos. */
+    /**
+     * Convierte INC o DEC sin registro a un arreglo de tres elementos.
+     *
+     * @param instruccion arreglo que contiene la operación.
+     * @return un arreglo con el operador, un operando vacío y el valor {@code "0"}.
+     */
     public String[] procesarInstruccionSinOperando(String[] instruccion) {
         return new String[]{instruccion[0].trim(), "", "0"};
     }
 
-    /** Convierte PARAM a un arreglo con el operador seguido de sus valores. */
+    /**
+     * Convierte PARAM a un arreglo con el operador seguido de sus valores.
+     *
+     * @param instruccion partes de la instrucción separadas por comas.
+     * @return un arreglo con el operador y los parámetros.
+     */
     public String[] procesarInstruccionParametros(String[] instruccion) {
         String[] partesOperacion = instruccion[0].trim().replaceAll("\\s+", " ").split(" ");
         String[] resultado = new String[instruccion.length + 1];
@@ -125,7 +135,12 @@ public class Parser {
         return null;
     }
 
-    /** Valida INC o DEC, con un registro opcional (sin él se modifica AC). */
+    /**
+     * Valida INC o DEC con un registro opcional.
+     *
+     * @param instruccion partes de la instrucción que se desea validar.
+     * @return {@code null} si la instrucción es válida; en caso contrario, un mensaje con la causa del error.
+     */
     public String validarInstruccionIncremento(String[] instruccion) {
         if (instruccion.length != 1) {
             return "Formato inválido: INC y DEC no admiten comas.";
@@ -140,7 +155,12 @@ public class Parser {
         return null;
     }
 
-    /** Valida SWAP o CMP, que requieren dos registros separados por coma. */
+    /**
+     * Valida SWAP o CMP con dos registros separados por coma.
+     *
+     * @param instruccion partes de la instrucción que se desea validar.
+     * @return {@code null} si la instrucción es válida; en caso contrario, un mensaje con la causa del error.
+     */
     public String validarInstruccionDosRegistros(String[] instruccion) {
         if (instruccion.length != 2) {
             return "Formato inválido: se esperaba \"OPERADOR REGISTRO1, REGISTRO2\".";
@@ -159,7 +179,12 @@ public class Parser {
         return null;
     }
 
-    /** Valida los códigos de interrupción. */
+    /**
+     * Valida el formato y el código de una interrupción.
+     *
+     * @param instruccion partes de la instrucción que se desea validar.
+     * @return {@code null} si la instrucción es válida; en caso contrario, un mensaje con la causa del error.
+     */
     public String validarInstruccionInterrupcion(String[] instruccion) {
         if (instruccion.length != 1) {
             return "Formato inválido: se esperaba \"INT CÓDIGO\".";
@@ -174,7 +199,12 @@ public class Parser {
         return null;
     }
 
-    /** Valida un desplazamiento entero para JMP, JE o JNE. */
+    /**
+     * Valida un desplazamiento entero para JMP, JE o JNE.
+     *
+     * @param instruccion partes de la instrucción que se desea validar.
+     * @return {@code null} si la instrucción es válida; en caso contrario, un mensaje con la causa del error.
+     */
     public String validarInstruccionSalto(String[] instruccion) {
         if (instruccion.length != 1) {
             return "Formato inválido: se esperaba \"OPERADOR DESPLAZAMIENTO\".";
@@ -191,7 +221,12 @@ public class Parser {
         return null;
     }
 
-    /** Valida de uno a tres parámetros numéricos separados por comas. */
+    /**
+     * Valida de uno a tres parámetros numéricos separados por comas.
+     *
+     * @param instruccion partes de la instrucción que se desea validar.
+     * @return {@code null} si la instrucción es válida; en caso contrario, un mensaje con la causa del error.
+     */
     public String validarInstruccionParametros(String[] instruccion) {
         if (instruccion.length > 3) {
             return "Formato inválido: PARAM admite como máximo tres valores.";
@@ -216,7 +251,12 @@ public class Parser {
         return null;
     }
 
-    /** Comprueba que PUSH o POP tengan exactamente un registro. */
+    /**
+     * Comprueba que PUSH o POP tengan exactamente un registro.
+     *
+     * @param instruccion partes de la instrucción que se desea validar.
+     * @return {@code null} si la instrucción es válida; en caso contrario, un mensaje con la causa del error.
+     */
     public String validarInstruccionPila(String[] instruccion) {
         if (instruccion.length != 1) {
             return "Formato inválido: se esperaba \"PUSH REGISTRO\" o \"POP REGISTRO\".";
@@ -231,7 +271,12 @@ public class Parser {
         return null;
     }
 
-    /** Valida el código de interrupción. */
+    /**
+     * Comprueba si un código de interrupción es reconocido.
+     *
+     * @param interrupcion código de interrupción que se desea comprobar.
+     * @return {@code true} si el código es 09H, 10H, 20H o 21H.
+     */
     public boolean validarInterrupcion(String interrupcion) {
         switch (interrupcion) {
             case "09H":
@@ -378,8 +423,8 @@ public class Parser {
     /**
      * Traduce una instrucción procesada a su representación en ensamblador.
      *
-     * @param instruccion arreglo con el operador, el registro y el valor.
-     * @return la instrucción en ensamblador con sus campos separados por espacios.
+     * @param instruccion arreglo con el operador y sus operandos.
+     * @return la instrucción en ensamblador, o una cadena vacía si no hay una instrucción.
      */
     public String traducirInstruccion(String[] instruccion) {
         if (instruccion == null) {

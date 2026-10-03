@@ -14,7 +14,7 @@ public class ResultadoParser {
     private String mensajeError;
 
     /**
-     * Constructor de la clase ResultadoParser
+     * Construye el resultado del análisis de una instrucción.
      *
      * @param valido {@code true} si la instrucción es válida; {@code false} en caso contrario.
      * @param instruccion instrucción procesada, o {@code null} si no es válida.
@@ -26,17 +26,29 @@ public class ResultadoParser {
         this.mensajeError = mensajeError;
     }
 
-    /** @return {@code true} si la instrucción procesada es válida. */
+    /**
+     * Comprueba si la instrucción procesada es válida.
+     *
+     * @return {@code true} si la instrucción es válida.
+     */
     public boolean esValido() {
         return valido;
     }
     
-    /** @return la instrucción procesada, o {@code null} si ocurrió un error. */
+    /**
+     * Obtiene la instrucción procesada.
+     *
+     * @return la instrucción procesada, o {@code null} si ocurrió un error.
+     */
     public String[] getInstruccion() {
         return instruccion;
     }
     
-    /** @return el mensaje de error, o {@code null} si la instrucción es válida. */
+    /**
+     * Obtiene el mensaje de error del análisis.
+     *
+     * @return el mensaje de error, o {@code null} si la instrucción es válida.
+     */
     public String getMensajeError() {
         return mensajeError;
     }

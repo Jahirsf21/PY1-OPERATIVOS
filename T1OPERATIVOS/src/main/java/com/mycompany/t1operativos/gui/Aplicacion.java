@@ -4,15 +4,19 @@ import com.mycompany.t1operativos.Controlador;
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableColumn;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DocumentFilter;
 
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.io.File;
 
 /**
- * Ventana principal de la aplicación Mini PC.
- *
- * Contiene los controles para cargar archivos ensamblador (.asm), ejecutarlos,
- * y visualizar el resultado de la simulación en dos tablas: instrucciones ensamblador y el estado de la memoria.
+ * Ventana principal de Mini PC.
  *
  * @author deislher sánchez funez
  */
@@ -28,37 +32,38 @@ public class Aplicacion extends JFrame {
     private JTextArea areaBCP;
     private JSpinner selectorMemoria;
     private JLabel lblDistribucionMemoria;
+    private JLabel lblEstadoEjecucion;
+    private JTextArea pantalla;
+    private int inicioEntradaConsola = -1;
+    private boolean actualizandoConsola;
     private DefaultTableModel modeloInstrucciones;
     private DefaultTableModel modeloMemoria;
     /**
-     * Construye la ventana principal e inicializa todos sus componentes.
-     *
+     * Construye e inicializa la ventana principal.
      */
     public Aplicacion() {
         initComponents();
     }
 
     /**
-     * Configura las propiedades generales de la ventana (título, tamaño, cierre) y
-     * construye el layout principal agregando el panel superior y el panel de tablas.
+     * Configura la ventana y sus componentes.
      */
     private void initComponents() {
         setTitle("Mini PC");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1100, 600);
+        setSize(1100, 750);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout(10, 10));
         add(crearPanelSuperior(), BorderLayout.NORTH);
         add(crearPanelTablas(), BorderLayout.CENTER);
         add(crearPanelBCP(), BorderLayout.EAST);
+        add(crearPanelConsola(), BorderLayout.SOUTH);
     }
 
     /**
-     * Crea el panel superior de la ventana, compuesto por la fila de botones de
-     * acción (Ejecutar, Paso a paso y Limpiar) y la fila del botón
-     * para cargar archivos .asm.
+     * Crea el panel de controles del programa.
      *
-     * @return el panel superior ya construido con sus botones.
+     * @return el panel superior.
      */
     private JPanel crearPanelSuperior() {
         JPanel panel = new JPanel();
@@ -95,20 +100,21 @@ public class Aplicacion extends JFrame {
         panel.add(panelCargarArchivo);
         panel.add(panelMemoria);
 
+        JPanel panelEjecucion = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        lblEstadoEjecucion = new JLabel("Sin programa cargado.");
+        panelEjecucion.add(lblEstadoEjecucion);
+        panel.add(panelEjecucion);
+
         return panel;
     }
 
     /**
-     * Crea el panel central con las dos tablas de la simulación:
-     * instrucciones (columna Instrucción) a la izquierda,
-     * memoria (columnas Posición/Valor en memoria) a la derecha.
-     * Ambas tablas se configuran como de solo lectura, sin reordenamiento de columnas ni selección de celdas.
+     * Crea las tablas de instrucciones y memoria.
      *
-     * @return el panel central con las dos tablas dentro de sus respectivos
-     *     {@link JScrollPane}.
+     * @return el panel con las tablas.
      */
     private JPanel crearPanelTablas() {
-        JPanel panel = new JPanel(new GridLayout(1, 2, 10, 0));
+        JPanel panel = new JPanel(new BorderLayout(10, 0));
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         modeloInstrucciones = new DefaultTableModel(new Object[]{"Instrucción"}, 0) {
@@ -123,7 +129,7 @@ public class Aplicacion extends JFrame {
         tablaInstrucciones.setCellSelectionEnabled(false);
         tablaInstrucciones.setRowSelectionAllowed(true);
         tablaInstrucciones.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        panel.add(new JScrollPane(tablaInstrucciones));
+        panel.add(new JScrollPane(tablaInstrucciones), BorderLayout.CENTER);
 
         modeloMemoria = new DefaultTableModel(new Object[]{"Posición", "Valor en memoria"}, 0) {
             @Override
@@ -136,45 +142,229 @@ public class Aplicacion extends JFrame {
         tablaMemoria.setCellSelectionEnabled(false);
         tablaMemoria.setRowSelectionAllowed(true);
         tablaMemoria.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        panel.add(new JScrollPane(tablaMemoria));
+        tablaMemoria.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        int[] anchosMemoria = {60, 260};
+        for (int i = 0; i < anchosMemoria.length; i++) {
+            TableColumn columna = tablaMemoria.getColumnModel().getColumn(i);
+            columna.setMinWidth(anchosMemoria[i]);
+            columna.setMaxWidth(anchosMemoria[i]);
+            columna.setPreferredWidth(anchosMemoria[i]);
+            columna.setWidth(anchosMemoria[i]);
+            columna.setResizable(false);
+        }
+        tablaMemoria.setPreferredScrollableViewportSize(new Dimension(tablaMemoria.getColumnModel().getTotalColumnWidth(), tablaMemoria.getPreferredScrollableViewportSize().height));
+        panel.add(new JScrollPane(tablaMemoria), BorderLayout.EAST);
         return panel;
     }
 
     /**
-     * Crea el panel lateral que muestra la información del bloque de control
-     * del proceso actual en un área de texto de solo lectura.
+     * Crea el panel del BCP actual.
      *
-     * @return el panel que contiene el título y el área de texto del BCP.
+     * @return el panel del BCP.
      */
     private JPanel crearPanelBCP() {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
         panel.setBorder(BorderFactory.createEmptyBorder(10,0,10,10));
-        panel.setPreferredSize(new Dimension(220, 0));
+        panel.setPreferredSize(new Dimension(360, 0));
         JLabel titulo = new JLabel("BCP ACTUAL");
         panel.add(titulo,BorderLayout.NORTH);
         areaBCP = new JTextArea();
         areaBCP.setEditable(false);
         areaBCP.setFont(new Font(Font.MONOSPACED, Font.PLAIN,12));
-        panel.add(new JScrollPane(areaBCP), BorderLayout.CENTER);
+        areaBCP.setLineWrap(true);
+        areaBCP.setWrapStyleWord(true);
+        panel.add(new JScrollPane(areaBCP, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER), BorderLayout.CENTER);
         return panel;
     }
 
-    /** @return el área de texto donde se muestra la información del BCP actual. */
+    /**
+     * Obtiene el área de texto del BCP.
+     *
+     * @return el área del BCP actual.
+     */
     public JTextArea getAreaBCP() {
         return areaBCP;
     }
 
     /**
-     * Actualiza la información visible del bloque de control del proceso actual.
+     * Actualiza la información del BCP.
      *
-     * @param textoBCP texto con la información del BCP que se desea mostrar.
+     * @param textoBCP texto que se desea mostrar.
      */
     public void mostrarBCP(String textoBCP) {
         areaBCP.setText(textoBCP);
     }
 
     /**
-     * Obtiene el tamaño total de memoria seleccionado por el usuario.
+     * Crea la consola de la aplicación.
+     *
+     * @return el panel de la consola.
+     */
+    private JPanel crearPanelConsola() {
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.setBorder(BorderFactory.createTitledBorder("Consola"));
+        pantalla = new JTextArea(6, 40);
+        pantalla.setEditable(false);
+        pantalla.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        configurarEntradaConsola();
+        panel.add(new JScrollPane(pantalla), BorderLayout.CENTER);
+        return panel;
+    }
+
+    /**
+     * Protege el historial de la consola y configura Enter para confirmar la entrada.
+     */
+    private void configurarEntradaConsola() {
+        ((AbstractDocument) pantalla.getDocument()).setDocumentFilter(new DocumentFilter() {
+            @Override
+            public void insertString(FilterBypass filtro, int posicion, String texto, AttributeSet atributos) throws BadLocationException {
+                replace(filtro, posicion, 0, texto, atributos);
+            }
+            @Override
+            public void remove(FilterBypass filtro, int posicion, int longitud) throws BadLocationException {
+                replace(filtro, posicion, longitud, null, null);
+            }
+            @Override
+            public void replace(FilterBypass filtro, int posicion, int longitud, String texto, AttributeSet atributos) throws BadLocationException {
+                if (actualizandoConsola) {
+                    filtro.replace(posicion, longitud, texto, atributos);
+                    return;
+                }
+                if (inicioEntradaConsola < 0 || posicion < inicioEntradaConsola) {
+                    return;
+                }
+                if (texto != null && (texto.contains("\n") || texto.contains("\r"))) {
+                    return;
+                }
+                filtro.replace(posicion, longitud, texto, atributos);
+            }
+        });
+
+        pantalla.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "confirmarEntradaConsola");
+        pantalla.getActionMap().put("confirmarEntradaConsola", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent evento) {
+                if (inicioEntradaConsola >= 0) {
+                    Aplicacion.this.firePropertyChange("Entrada de teclado", null, getTextoEntradaTeclado());
+                }
+            }
+        });
+        pantalla.getActionMap().put("select-all", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent evento) {
+                if (inicioEntradaConsola >= 0) {
+                    seleccionarEntradaTeclado();
+                } else {
+                    pantalla.selectAll();
+                }
+            }
+        });
+    }
+
+    /**
+     * Obtiene la consola de la aplicación.
+     *
+     * @return el área de texto de la consola.
+     */
+    public JTextArea getPantalla() {
+        return pantalla;
+    }
+
+    /**
+     * Obtiene el texto de la entrada activa.
+     *
+     * @return el texto ingresado, o una cadena vacía si no hay una entrada activa.
+     */
+    public String getTextoEntradaTeclado() {
+        if (inicioEntradaConsola < 0) {
+            return "";
+        }
+        return pantalla.getText().substring(inicioEntradaConsola);
+    }
+
+    /**
+     * Selecciona el texto de la entrada activa.
+     */
+    public void seleccionarEntradaTeclado() {
+        if (inicioEntradaConsola >= 0) {
+            pantalla.select(inicioEntradaConsola, pantalla.getDocument().getLength());
+        }
+    }
+
+    /**
+     * Agrega una línea a la consola.
+     *
+     * @param texto texto que se desea mostrar.
+     */
+    public void imprimirPantalla(String texto) {
+        String entrada = getTextoEntradaTeclado();
+        actualizandoConsola = true;
+        try {
+            if (inicioEntradaConsola >= 0) {
+                pantalla.append("\n" + texto + "\n");
+                inicioEntradaConsola = pantalla.getDocument().getLength();
+                pantalla.append(entrada);
+            } else {
+                pantalla.append(texto + "\n");
+            }
+        } finally {
+            actualizandoConsola = false;
+        }
+        pantalla.setCaretPosition(pantalla.getDocument().getLength());
+    }
+
+    /**
+     * Habilita o deshabilita la entrada de teclado durante INT 09H.
+     *
+     * @param habilitada {@code true} para permitir la entrada.
+     */
+    public void setEntradaTecladoHabilitada(boolean habilitada) {
+        if (habilitada) {
+            if (inicioEntradaConsola < 0) {
+                inicioEntradaConsola = pantalla.getDocument().getLength();
+            }
+            pantalla.setEditable(true);
+            pantalla.setCaretPosition(pantalla.getDocument().getLength());
+            pantalla.requestFocusInWindow();
+        } else {
+            if (inicioEntradaConsola >= 0) {
+                actualizandoConsola = true;
+                try {
+                    pantalla.append("\n");
+                } finally {
+                    actualizandoConsola = false;
+                }
+            }
+            inicioEntradaConsola = -1;
+            pantalla.setEditable(false);
+        }
+    }
+
+    /**
+     * Actualiza el texto del estado de ejecución.
+     *
+     * @param estado texto del estado o de la instrucción actual.
+     */
+    public void mostrarEstadoEjecucion(String estado) {
+        lblEstadoEjecucion.setText(estado);
+    }
+
+    /**
+     * Limpia la consola y deshabilita la entrada.
+     */
+    public void limpiarConsola() {
+        inicioEntradaConsola = -1;
+        pantalla.setEditable(false);
+        actualizandoConsola = true;
+        try {
+            pantalla.setText("");
+        } finally {
+            actualizandoConsola = false;
+        }
+    }
+
+    /**
+     * Obtiene el tamaño de memoria seleccionado.
      *
      * @return la cantidad seleccionada de posiciones de memoria.
      */
@@ -183,7 +373,7 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Habilita o deshabilita los controles que requieren un programa cargado.
+     * Habilita o deshabilita los controles del programa.
      *
      * @param habilitados {@code true} para habilitar los controles.
      */
@@ -194,7 +384,7 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Habilita o deshabilita el selector del tamaño de memoria.
+     * Habilita o deshabilita el selector de memoria.
      *
      * @param habilitado {@code true} para permitir cambiar el tamaño.
      */
@@ -203,26 +393,28 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Resalta la próxima instrucción y la posición donde está almacenada.
+     * Resalta la próxima instrucción en ambas tablas.
      *
-     * @param filaInstruccion fila correspondiente en la tabla de instrucciones.
-     * @param posicionMemoria fila correspondiente en la tabla de memoria.
+     * @param filaInstruccion índice de la fila en la tabla de instrucciones.
+     * @param posicionMemoria posición de la instrucción en memoria.
      */
     public void seleccionarProximaInstruccion(int filaInstruccion, int posicionMemoria) {
         seleccionarFila(tablaInstrucciones, filaInstruccion);
         seleccionarFila(tablaMemoria, posicionMemoria);
     }
 
-    /** Elimina el resaltado actual de las tablas. */
+    /**
+     * Elimina la selección de ambas tablas.
+     */
     public void limpiarSeleccionTablas() {
         tablaInstrucciones.clearSelection();
         tablaMemoria.clearSelection();
     }
 
     /**
-     * Selecciona una fila y la desplaza al área visible de su tabla.
+     * Selecciona una fila y la desplaza al área visible.
      *
-     * @param tabla tabla que contiene la fila.
+     * @param tabla tabla que se desea actualizar.
      * @param fila índice de la fila que se desea seleccionar.
      */
     private void seleccionarFila(JTable tabla, int fila) {
@@ -235,7 +427,9 @@ public class Aplicacion extends JFrame {
         tabla.scrollRectToVisible(areaFila);
     }
 
-    /** Actualiza el texto con la distribución de memoria seleccionada. */
+    /**
+     * Actualiza el texto de la distribución de memoria.
+     */
     private void actualizarDistribucionMemoria() {
         int total = getMemoriaSeleccionada();
         int kernel = total / 4;
@@ -244,10 +438,7 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Abre un {@link JFileChooser} restringido a archivos con extensión .asm y
-     * que permite seleccionar un único archivo. Si el usuario confirma
-     * la selección, dispara un evento de propiedad {@code "Archivo cargado"}
-     * para que el controlador procese el archivo.
+     * Selecciona un archivo ensamblador y notifica su carga.
      */
     private void abrirSelectorArchivo() {
         JFileChooser fileChooser = new JFileChooser();
@@ -259,38 +450,62 @@ public class Aplicacion extends JFrame {
         }
     }
 
-    /** @return el botón de ejecutar. */
+    /**
+     * Obtiene el botón de ejecución automática.
+     *
+     * @return el botón Ejecutar.
+     */
     public JButton getBtnEjecutar() {
         return btnEjecutar;
     }
 
-    /** @return el botón de Paso a paso. */
+    /**
+     * Obtiene el botón de ejecución manual.
+     *
+     * @return el botón Paso a paso.
+     */
     public JButton getBtnPasoAPaso() {
         return btnPasoAPaso;
     }
 
-    /** @return el botón de Limpiar. */
+    /**
+     * Obtiene el botón de limpieza.
+     *
+     * @return el botón Limpiar.
+     */
     public JButton getBtnLimpiar() {
         return btnLimpiar;
     }
 
-   /** @return el botón de Cargar archivos. */
+    /**
+     * Obtiene el botón de carga de archivos.
+     *
+     * @return el botón Cargar archivo.
+     */
     public JButton getBtnCargarArchivo() {
         return btnCargarArchivo;
     }
 
-    /** @return el modelo de datos de la tabla de instrucciones. */
+    /**
+     * Obtiene el modelo de la tabla de instrucciones.
+     *
+     * @return el modelo de instrucciones.
+     */
     public DefaultTableModel getModeloInstrucciones() {
         return modeloInstrucciones;
     }
 
-    /** @return el modelo de datos de la tabla de memoria. */
+    /**
+     * Obtiene el modelo de la tabla de memoria.
+     *
+     * @return el modelo de memoria.
+     */
     public DefaultTableModel getModeloMemoria() { return modeloMemoria; }
 
     /**
-     * Punto de entrada de la aplicación. Intenta aplicar el Look & Feel Nimbus antes de mostrar la ventana principal.
+     * Inicia la aplicación.
      *
-     * @param args argumentos
+     * @param args argumentos de inicio.
      */
     public static void main(String[] args) {
         try {

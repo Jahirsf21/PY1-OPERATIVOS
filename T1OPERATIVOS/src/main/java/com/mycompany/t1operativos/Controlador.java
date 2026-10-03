@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import javax.swing.JOptionPane;
 import javax.swing.Timer;
 import javax.swing.table.DefaultTableModel;
@@ -27,6 +28,11 @@ public class Controlador {
     private BCP bcp;
     private int posicionBCP;
     private Timer ejecucionAutomatica;
+    private String[] instruccionPendiente;
+    private int segundosPendientes;
+    private boolean modoAutomatico;
+    private boolean esperandoTeclado;
+    private long inicioEsperaTeclado;
 
     /**
      * Construye el controlador y registra los eventos de la interfaz.
@@ -41,11 +47,13 @@ public class Controlador {
         this.cargador = new CargadorArchivos();
         this.parser = new Parser();
         this.posicionBCP = -1;
-        this.ejecucionAutomatica = new Timer(25, e -> ejecutarPaso());
+        this.ejecucionAutomatica = new Timer(1000, e -> ejecutarPaso());
         registrarEventos();
     }
 
-    /** Registra las acciones de los botones y del selector de archivos. */
+    /**
+     * Registra los eventos de la interfaz.
+     */
     private void registrarEventos() {
         vista.addPropertyChangeListener("Archivo cargado", evento -> {
             Object archivoSeleccionado = evento.getNewValue();
@@ -56,6 +64,7 @@ public class Controlador {
         vista.getBtnPasoAPaso().addActionListener(e -> ejecutarPaso());
         vista.getBtnEjecutar().addActionListener(e -> ejecutarTodo());
         vista.getBtnLimpiar().addActionListener(e -> limpiar());
+        vista.addPropertyChangeListener("Entrada de teclado", evento -> recibirEntradaTeclado());
     }
 
     /**
@@ -64,6 +73,9 @@ public class Controlador {
      * @param archivo archivo ensamblador seleccionado.
      */
     private void cargarPrograma(File archivo) {
+        if (modoAutomatico || esperandoTeclado) {
+            return;
+        }
         try {
             int tamañoTotal = vista.getMemoriaSeleccionada();
             if (tamañoTotal % 4 != 0) {
@@ -91,6 +103,7 @@ public class Controlador {
             bcp.setEstadoListo();
             bcp.guardarContexto(cpu);
             posicionBCP = 0;
+            reiniciarEjecucion();
             llenarTablaInstrucciones(instrucciones);
             actualizarTablaMemoria();
             actualizarBCP();
@@ -98,56 +111,139 @@ public class Controlador {
             vista.setSelectorMemoriaHabilitado(false);
             vista.setControlesProgramaHabilitados(true);
             vista.setTitle("Mini PC - " + archivo.getName());
+            actualizarEstadoEjecucion();
         } catch (IOException | IllegalArgumentException | IllegalStateException ex) {
             mostrarError(ex.getMessage());
         }
     }
 
-    /** Ejecuta una instrucción y refleja el nuevo contexto del proceso. */
+    /**
+     * Avanza un segundo de CPU y completa la instrucción al alcanzar su peso.
+     */
     private void ejecutarPaso() {
         if (cpu == null || bcp == null) {
             mostrarError("Primero debe cargar un programa.");
             return;
         }
+        if (esperandoTeclado || "TERMINADO".equals(bcp.getEstado())) {
+            return;
+        }
         try {
-            bcp.setEstadoEjecutando();
-            if (ejecutarSiguiente()) {
-                bcp.guardarContexto(cpu);
-            }
             if (!hayInstruccionPendiente()) {
-                bcp.setEstadoTerminado();
-                deshabilitarEjecucion();
+                finalizarProceso();
+                actualizarContextoVista();
+                return;
             }
-            actualizarBCP();
-            actualizarTablaMemoria();
-            actualizarSeleccionProximaInstruccion();
+            bcp.setEstadoEjecutando();
+            bcp.setCpuActual(1);
+            if (instruccionPendiente == null) {
+                instruccionPendiente = memoria.leer(cpu.getPc());
+                if (instruccionPendiente == null) {
+                    throw new IllegalStateException("No existe una instrucción en la posición " + cpu.getPc() + ".");
+                }
+                cpu.cargarInstruccion(instruccionPendiente);
+                if ("INT".equals(instruccionPendiente[0]) && "09H".equals(instruccionPendiente[1])) {
+                    ejecutarSiguiente();
+                    actualizarContextoVista();
+                    return;
+                }
+                segundosPendientes = obtenerPeso(instruccionPendiente);
+            }
+
+            bcp.aumentarTiempoEmpleado();
+            segundosPendientes--;
+            if (segundosPendientes == 0) {
+                ejecutarSiguiente();
+                instruccionPendiente = null;
+                if ("TERMINADO".equals(bcp.getEstado()) || !hayInstruccionPendiente()) {
+                    finalizarProceso();
+                }
+            }
+            actualizarContextoVista();
         } catch (IllegalArgumentException | IllegalStateException ex) {
-            bcp.setEstadoBloqueado();
-            bcp.guardarContexto(cpu);
-            actualizarBCP();
-            actualizarTablaMemoria();
-            actualizarSeleccionProximaInstruccion();
-            deshabilitarEjecucion();
+            finalizarProceso();
+            actualizarContextoVista();
+            vista.mostrarEstadoEjecucion("Ejecución finalizada con error.");
+            vista.imprimirPantalla("Error: " + ex.getMessage());
             mostrarError(ex.getMessage());
         }
     }
 
-    /** Ejecuta automáticamente todas las instrucciones pendientes hasta finalizar. */
+    /**
+     * Inicia la ejecución automática del programa.
+     */
     private void ejecutarTodo() {
         if (cpu == null || bcp == null) {
             mostrarError("Primero debe cargar un programa.");
             return;
         }
+        if (esperandoTeclado || "TERMINADO".equals(bcp.getEstado())) {
+            return;
+        }
+        modoAutomatico = true;
+        bcp.setEstadoEjecutando();
+        bcp.setCpuActual(1);
+        deshabilitarControlesDuranteEjecucion();
+        actualizarContextoVista();
+        ejecucionAutomatica.start();
+    }
+
+    /**
+     * Deshabilita los controles durante la ejecución.
+     */
+    private void deshabilitarControlesDuranteEjecucion() {
         vista.getBtnEjecutar().setEnabled(false);
         vista.getBtnPasoAPaso().setEnabled(false);
         vista.getBtnCargarArchivo().setEnabled(false);
         vista.getBtnLimpiar().setEnabled(false);
-        ejecucionAutomatica.start();
     }
 
-    /** Ejecuta la instrucción ubicada en el PC actual. */
+    /**
+     * Obtiene el peso fijo de una instrucción.
+     *
+     * @param instruccion arreglo con el operador y sus operandos.
+     * @return el peso fijo de la instrucción en segundos.
+     */
+    private int obtenerPeso(String[] instruccion) {
+        switch (instruccion[0]) {
+            case "MOV":
+            case "INC":
+            case "DEC":
+            case "SWAP":
+            case "PUSH":
+            case "POP":
+                return 1;
+            case "LOAD":
+            case "STORE":
+            case "CMP":
+            case "JMP":
+            case "JE":
+            case "JNE":
+                return 2;
+            case "ADD":
+            case "SUB":
+            case "PARAM":
+                return 3;
+            case "INT":
+                if ("10H".equals(instruccion[1]) || "20H".equals(instruccion[1])) {
+                    return 2;
+                }
+                if ("21H".equals(instruccion[1])) {
+                    return 5;
+                }
+                throw new IllegalStateException("INT 09H no tiene un peso fijo; depende de la entrada del usuario.");
+            default:
+                throw new IllegalArgumentException("No se conoce el peso de " + instruccion[0] + ".");
+        }
+    }
+
+    /**
+     * Ejecuta la instrucción ubicada en el PC actual.
+     *
+     * @return {@code true} si la instrucción se completó; {@code false} si no se ejecutó o espera una entrada.
+     */
     private boolean ejecutarSiguiente() {
-        if (!hayInstruccionPendiente()) {
+        if (esperandoTeclado || "TERMINADO".equals(bcp.getEstado()) || !hayInstruccionPendiente()) {
             return false;
         }
         String[] instruccion = memoria.leer(cpu.getPc());
@@ -185,6 +281,22 @@ public class Controlador {
             case "POP":
                 cpu.escribirRegistro(instruccion[1], bcp.desapilar());
                 break;
+            case "INT":
+                switch (instruccion[1]) {
+                    case "20H":
+                        bcp.setEstadoTerminado();
+                        break;
+                    case "10H":
+                        vista.imprimirPantalla(cpu.getDx());
+                        break;
+                    case "09H":
+                        solicitarEntradaTeclado();
+                        return false;
+                    default:
+                        throw new IllegalArgumentException("La interrupción INT " + instruccion[1]
+                                + " todavía no está implementada.");
+                }
+                break;
             default:
                 cpu.ejecutarInstruccion(instruccion);
                 break;
@@ -193,7 +305,130 @@ public class Controlador {
         return true;
     }
 
-    /** Calcula un salto relativo al PC actual y protege los límites del proceso. */
+    /**
+     * Solicita una entrada de teclado y bloquea el proceso.
+     */
+    private void solicitarEntradaTeclado() {
+        ejecucionAutomatica.stop();
+        esperandoTeclado = true;
+        inicioEsperaTeclado = System.nanoTime();
+        bcp.setEstadoBloqueado();
+        deshabilitarControlesDuranteEjecucion();
+        vista.imprimirPantalla(">> Ingresar valor: ");
+        vista.setEntradaTecladoHabilitada(true);
+    }
+
+    /**
+     * Valida la entrada de teclado y completa la interrupción INT 09H.
+     */
+    private void recibirEntradaTeclado() {
+        if (!esperandoTeclado) {
+            return;
+        }
+        String texto = vista.getTextoEntradaTeclado().trim();
+        int valor;
+        try {
+            valor = Integer.parseInt(texto);
+        } catch (NumberFormatException ex) {
+            vista.imprimirPantalla("Entrada inválida: se requiere un entero de 0 a 255.");
+            vista.seleccionarEntradaTeclado();
+            return;
+        }
+        if (valor < 0 || valor > 255) {
+            vista.imprimirPantalla("Entrada fuera de rango: el valor debe estar entre 0 y 255.");
+            vista.seleccionarEntradaTeclado();
+            return;
+        }
+
+        registrarEsperaTeclado();
+        cpu.setDx(Integer.toString(valor));
+        cpu.avanzarPc();
+        instruccionPendiente = null;
+        segundosPendientes = 0;
+        vista.setEntradaTecladoHabilitada(false);
+        if (!hayInstruccionPendiente()) {
+            finalizarProceso();
+        } else {
+            bcp.setEstadoListo();
+            if (modoAutomatico) {
+                ejecucionAutomatica.restart();
+            } else {
+                vista.setControlesProgramaHabilitados(true);
+                vista.getBtnCargarArchivo().setEnabled(true);
+            }
+        }
+        actualizarContextoVista();
+    }
+
+    /**
+     * Suma la espera de teclado al tiempo del proceso.
+     */
+    private void registrarEsperaTeclado() {
+        if (esperandoTeclado) {
+            long segundos = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - inicioEsperaTeclado);
+            bcp.aumentarTiempoEmpleado(segundos);
+            esperandoTeclado = false;
+            inicioEsperaTeclado = 0;
+        }
+    }
+
+    /**
+     * Finaliza el proceso y detiene la ejecución.
+     */
+    private void finalizarProceso() {
+        registrarEsperaTeclado();
+        bcp.setEstadoTerminado();
+        instruccionPendiente = null;
+        segundosPendientes = 0;
+        deshabilitarEjecucion();
+    }
+
+    /**
+     * Guarda el contexto actual y actualiza la vista.
+     */
+    private void actualizarContextoVista() {
+        bcp.guardarContexto(cpu);
+        actualizarBCP();
+        actualizarTablaMemoria();
+        actualizarSeleccionProximaInstruccion();
+        actualizarEstadoEjecucion();
+    }
+
+    /**
+     * Actualiza el estado de ejecución mostrado en la vista.
+     */
+    private void actualizarEstadoEjecucion() {
+        if (bcp == null) {
+            vista.mostrarEstadoEjecucion("Sin programa cargado.");
+        } else if (esperandoTeclado) {
+            vista.mostrarEstadoEjecucion("INT 09H: esperando una entrada del teclado.");
+        } else if (instruccionPendiente != null) {
+            vista.mostrarEstadoEjecucion("Ejecutando: " + parser.traducirInstruccion(instruccionPendiente));
+        } else {
+            vista.mostrarEstadoEjecucion("Proceso " + bcp.getEstado());
+        }
+    }
+
+    /**
+     * Restablece el modo de ejecución y limpia la consola.
+     */
+    private void reiniciarEjecucion() {
+        ejecucionAutomatica.stop();
+        modoAutomatico = false;
+        esperandoTeclado = false;
+        inicioEsperaTeclado = 0;
+        instruccionPendiente = null;
+        segundosPendientes = 0;
+        vista.limpiarConsola();
+        actualizarEstadoEjecucion();
+    }
+
+    /**
+     * Calcula el destino de un salto dentro de los límites del proceso.
+     *
+     * @param desplazamiento desplazamiento relativo al PC actual.
+     * @return la dirección de destino del salto.
+     */
     private int calcularDestinoSalto(int desplazamiento) {
         long destino = (long) cpu.getPc() + desplazamiento;
         if (destino < bcp.getInicioMemoria() || destino > bcp.getFinMemoria()) {
@@ -202,12 +437,20 @@ public class Controlador {
         return (int) destino;
     }
 
-    /** Indica si el PC se encuentra dentro del programa cargado. */
+    /**
+     * Comprueba si el PC se encuentra dentro del programa cargado.
+     *
+     * @return {@code true} si el PC está dentro de los límites del programa.
+     */
     private boolean hayInstruccionPendiente() {
         return cpu.getPc() >= bcp.getInicioMemoria() && cpu.getPc() <= bcp.getFinMemoria();
     }
 
-    /** Llena la tabla con las instrucciones en formato ensamblador. */
+    /**
+     * Llena la tabla con las instrucciones en ensamblador.
+     *
+     * @param instrucciones lista de instrucciones procesadas.
+     */
     private void llenarTablaInstrucciones(List<String[]> instrucciones) {
         DefaultTableModel modelo = vista.getModeloInstrucciones();
         modelo.setRowCount(0);
@@ -216,7 +459,9 @@ public class Controlador {
         }
     }
 
-    /** Escribe los atributos del BCP en el kernel. */
+    /**
+     * Escribe los atributos del BCP en el kernel.
+     */
     private void escribirBCPEnMemoria() {
         String[] nombres = {
             "idProceso",
@@ -237,7 +482,7 @@ public class Controlador {
             "cpuActual",
             "tiempoInicio",
             "tiempoFinal",
-            "tiempoEmpleadoSegundos",
+            "tiempoTotalSegundos",
             "direccionSiguienteBCP"
         };
         String[] valores = {String.valueOf(bcp.getIdProceso()), bcp.getEstado(),
@@ -248,14 +493,16 @@ public class Controlador {
             String.valueOf(bcp.esIgual()), Arrays.toString(bcp.getPila()),
             String.valueOf(bcp.getPunteroPila()), String.valueOf(bcp.getCpuActual()),
             String.valueOf(bcp.getTiempoInicio()), String.valueOf(bcp.getTiempoFinal()),
-            String.valueOf(bcp.getTiempoEmpleadoSegundos()), String.valueOf(bcp.getDireccionSiguienteBCP())
+            String.valueOf(bcp.getTiempoTotalSegundos()), String.valueOf(bcp.getDireccionSiguienteBCP())
         };
         for (int i = 0; i < nombres.length; i++) {
             memoria.escribirKernel(posicionBCP + i, nombres[i], valores[i]);
         }
     }
 
-    /** Actualiza la tabla que representa todas las posiciones de memoria. */
+    /**
+     * Actualiza la tabla con el contenido de la memoria.
+     */
     private void actualizarTablaMemoria() {
         DefaultTableModel modelo = vista.getModeloMemoria();
         modelo.setRowCount(0);
@@ -280,7 +527,9 @@ public class Controlador {
         }
     }
 
-    /** Muestra en el área lateral todos los valores actuales del BCP. */
+    /**
+     * Actualiza la información del BCP en la vista.
+     */
     private void actualizarBCP() {
         if (bcp == null) {
             vista.mostrarBCP("");
@@ -302,7 +551,11 @@ public class Controlador {
                 + "\nDX: " + bcp.getDx()
                 + "\nFlag: " + bcp.esIgual()
                 + "\nPila: " + Arrays.toString(bcp.getPila())
-                + "\nPuntero pila: " + bcp.getPunteroPila();
+                + "\nPuntero pila: " + bcp.getPunteroPila()
+                + "\nCPU actual: " + bcp.getCpuActual()
+                + "\nInicio ejecución: " + (bcp.getTiempoInicio() == null ? "-" : bcp.getTiempoInicio().toString())
+                + "\nFin ejecución: " + (bcp.getTiempoFinal() == null ? "-" : bcp.getTiempoFinal().toString())
+                + "\nDuración: " + bcp.getTiempoTotalSegundos() + " s";
         vista.mostrarBCP(texto);
     }
 
@@ -310,7 +563,7 @@ public class Controlador {
      * Resalta en ambas tablas la instrucción señalada actualmente por el PC.
      */
     private void actualizarSeleccionProximaInstruccion() {
-        if (cpu == null || memoria == null || bcp == null || !hayInstruccionPendiente()) {
+        if (cpu == null || memoria == null || bcp == null || "TERMINADO".equals(bcp.getEstado()) || !hayInstruccionPendiente()) {
             vista.limpiarSeleccionTablas();
             return;
         }
@@ -319,9 +572,10 @@ public class Controlador {
         vista.seleccionarProximaInstruccion(filaInstruccion, posicionMemoria);
     }
 
-    /** Elimina el programa y permite seleccionar una nueva memoria. */
+    /**
+     * Elimina el programa cargado y restablece la interfaz.
+     */
     private void limpiar() {
-        ejecucionAutomatica.stop();
         memoria = null;
         cpu = null;
         bcp = null;
@@ -333,18 +587,29 @@ public class Controlador {
         vista.setControlesProgramaHabilitados(false);
         vista.setSelectorMemoriaHabilitado(true);
         vista.setTitle("Mini PC");
+        vista.getBtnCargarArchivo().setEnabled(true);
+        reiniciarEjecucion();
     }
 
-    /** Deshabilita los botones cuando el proceso ya no puede continuar. */
+    /**
+     * Detiene la ejecución y deshabilita sus controles.
+     */
     private void deshabilitarEjecucion() {
         ejecucionAutomatica.stop();
+        modoAutomatico = false;
+        esperandoTeclado = false;
+        vista.setEntradaTecladoHabilitada(false);
         vista.getBtnCargarArchivo().setEnabled(true);
         vista.getBtnEjecutar().setEnabled(false);
         vista.getBtnPasoAPaso().setEnabled(false);
         vista.getBtnLimpiar().setEnabled(true);
     }
 
-    /** Muestra un mensaje de error asociado a la ventana principal. */
+    /**
+     * Muestra un mensaje de error en la interfaz.
+     *
+     * @param mensaje descripción del error que se desea mostrar.
+     */
     private void mostrarError(String mensaje) {
         JOptionPane.showMessageDialog(vista, mensaje, "Error", JOptionPane.ERROR_MESSAGE);
     }

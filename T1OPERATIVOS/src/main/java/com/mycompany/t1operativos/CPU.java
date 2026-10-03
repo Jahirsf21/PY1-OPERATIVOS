@@ -18,12 +18,18 @@ public class CPU {
     private String dx;
     private boolean flag;
 
-    /** Construye una CPU e inicializa sus registros. */
+    /**
+     * Construye una CPU e inicializa sus registros.
+     */
     public CPU() {
         reiniciar();
     }
 
-    /** Carga en el IR la instrucción que se va a ejecutar. */
+    /**
+     * Carga en el IR la instrucción que se va a ejecutar.
+     *
+     * @param instruccion arreglo con el operador y sus operandos.
+     */
     public void cargarInstruccion(String[] instruccion) {
         if (instruccion == null || instruccion.length == 0) {
             throw new IllegalArgumentException("La instrucción no puede ser nula ni vacía.");
@@ -31,7 +37,11 @@ public class CPU {
         ir = instruccion.clone();
     }
 
-    /** Ejecuta una instrucción validada por el parser y cargada por el controlador. */
+    /**
+     * Ejecuta una instrucción validada por el parser.
+     *
+     * @param instruccion arreglo con la instrucción que se desea ejecutar.
+     */
     public void ejecutarInstruccion(String[] instruccion) {
         cargarInstruccion(instruccion);
         String operador = ir[0];
@@ -85,12 +95,19 @@ public class CPU {
         }
     }
 
-    /** Avanza el contador de programa a la siguiente posición. */
+    /**
+     * Avanza el contador de programa a la siguiente posición.
+     */
     public void avanzarPc() {
         pc++;
     }
 
-    /** Lee el valor de un registro. */
+    /**
+     * Lee el valor numérico de un registro.
+     *
+     * @param registro nombre del registro que se desea leer.
+     * @return el valor del registro.
+     */
     public int leerRegistro(String registro) {
         switch (registro) {
             case "AX":
@@ -110,7 +127,12 @@ public class CPU {
         }
     }
 
-    /** Almacena un valor en un registro. */
+    /**
+     * Almacena un valor numérico en un registro.
+     *
+     * @param registro nombre del registro que se desea actualizar.
+     * @param valor valor que se desea almacenar.
+     */
     public void escribirRegistro(String registro, int valor) {
         switch (registro) {
             case "AX":
@@ -130,12 +152,19 @@ public class CPU {
         }
     }
 
-    /** Comprueba si un valor corresponde a un registro. */
+    /**
+     * Comprueba si un valor corresponde a un registro.
+     *
+     * @param valor nombre que se desea comprobar.
+     * @return {@code true} si el valor es AX, BX, CX o DX.
+     */
     private boolean esRegistro(String valor) {
         return "AX".equals(valor) || "BX".equals(valor) || "CX".equals(valor) || "DX".equals(valor);
     }
 
-    /** Reinicia los registros de la CPU. */
+    /**
+     * Reinicia los registros de la CPU.
+     */
     public void reiniciar() {
         pc = 0;
         ir = null;
@@ -147,12 +176,20 @@ public class CPU {
         flag = false;
     }
 
-    /** @return el valor actual del contador de programa. */
+    /**
+     * Obtiene el contador de programa actual.
+     *
+     * @return el valor del PC.
+     */
     public int getPc() {
         return pc;
     }
 
-    /** Cambia el valor del contador de programa. */
+    /**
+     * Cambia el valor del contador de programa.
+     *
+     * @param valor posición de memoria que se desea asignar al PC.
+     */
     public void setPc(int valor) {
         if (valor < 0) {
             throw new IllegalArgumentException("El PC no puede ser negativo.");
@@ -160,7 +197,11 @@ public class CPU {
         pc = valor;
     }
 
-    /** @return la instrucción actual. */
+    /**
+     * Obtiene una copia de la instrucción actual.
+     *
+     * @return una copia del IR, o {@code null} si no hay una instrucción.
+     */
     public String[] getIr() {
         if (ir == null) {
             return null;
@@ -168,37 +209,65 @@ public class CPU {
         return ir.clone();
     }
 
-    /** @return el valor actual del acumulador. */
+    /**
+     * Obtiene el valor actual del acumulador.
+     *
+     * @return el valor de AC.
+     */
     public int getAc() {
         return ac;
     }
 
-    /** @return el valor actual de AX. */
+    /**
+     * Obtiene el valor actual del registro AX.
+     *
+     * @return el valor de AX.
+     */
     public int getAx() {
         return ax;
     }
 
-    /** @return el valor actual de BX. */
+    /**
+     * Obtiene el valor actual del registro BX.
+     *
+     * @return el valor de BX.
+     */
     public int getBx() {
         return bx;
     }
 
-    /** @return el valor actual de CX. */
+    /**
+     * Obtiene el valor actual del registro CX.
+     *
+     * @return el valor de CX.
+     */
     public int getCx() {
         return cx;
     }
 
-    /** @return el contenido actual de DX. */
+    /**
+     * Obtiene el contenido actual del registro DX.
+     *
+     * @return el contenido de DX.
+     */
     public String getDx() {
         return dx;
     }
 
-    /** @return si los registros de la última comparación eran iguales. */
+    /**
+     * Comprueba el resultado de la última comparación.
+     *
+     * @return {@code true} si los registros comparados eran iguales.
+     */
     public boolean esIgual() {
         return flag;
     }
 
-    /** Asigna texto a DX. */
+    /**
+     * Asigna texto al registro DX.
+     *
+     * @param valor texto que se desea almacenar.
+     */
     public void setDx(String valor) {
         if (valor == null) {
             throw new IllegalArgumentException("DX no puede ser nulo.");

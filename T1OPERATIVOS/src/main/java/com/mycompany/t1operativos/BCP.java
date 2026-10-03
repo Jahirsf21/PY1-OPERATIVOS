@@ -3,10 +3,7 @@ package com.mycompany.t1operativos;
 import java.time.LocalDateTime;
 
 /**
- * Representa el Bloque de Control de Proceso (BCP) de un programa.
- *
- * Almacena la identificación, el estado, la prioridad, los límites de memoria
- * y el contexto de ejecución necesario para administrar un proceso.
+ * Bloque de control de proceso.
  *
  * @author deislher sánchez funez
  */
@@ -33,12 +30,12 @@ public class BCP {
     private int direccionSiguienteBCP;
 
     /**
-     * Construye un BCP para un proceso nuevo e inicializa sus registros en cero.
+     * Construye el BCP de un proceso.
      *
-     * @param idProceso identificador único del proceso.
+     * @param idProceso identificador del proceso.
      * @param prioridad prioridad asignada al proceso.
-     * @param inicioMemoria primera posición de memoria asignada al proceso.
-     * @param finMemoria última posición de memoria asignada al proceso.
+     * @param inicioMemoria primera posición de memoria asignada.
+     * @param finMemoria última posición de memoria asignada.
      */
     public BCP(int idProceso, int prioridad, int inicioMemoria, int finMemoria) {
         this.idProceso = idProceso;
@@ -64,12 +61,9 @@ public class BCP {
     }
 
     /**
-     * Guarda en el BCP el contexto actual de una CPU, incluidos el contador de
-     * programa, el registro de instrucción, el acumulador y los registros de
-     * propósito general.
+     * Guarda el contexto actual de la CPU.
      *
      * @param cpu CPU cuyo contexto se desea guardar.
-     * @throws IllegalArgumentException si la CPU es {@code null}.
      */
     public void guardarContexto(CPU cpu) {
         if (cpu == null) {
@@ -90,7 +84,11 @@ public class BCP {
         this.flag = cpu.esIgual();
     }
 
-    /** Guarda un valor en la pila del proceso. */
+    /**
+     * Guarda un valor en la pila del proceso.
+     *
+     * @param valor valor que se desea apilar.
+     */
     public void apilar(int valor) {
         if (punteroPila >= pila.length - 1) {
             throw new IllegalStateException("Desbordamiento de pila: capacidad máxima de 5 valores.");
@@ -98,7 +96,11 @@ public class BCP {
         pila[++punteroPila] = valor;
     }
 
-    /** Retira el último valor de la pila del proceso. */
+    /**
+     * Retira el último valor de la pila del proceso.
+     *
+     * @return el valor retirado de la pila.
+     */
     public int desapilar() {
         if (punteroPila < 0) {
             throw new IllegalStateException("La pila está vacía.");
@@ -108,29 +110,49 @@ public class BCP {
         return valor;
     }
 
-    /** @return una copia de los valores presentes en la pila. */
+    /**
+     * Obtiene los valores almacenados en la pila.
+     *
+     * @return una copia de los valores de la pila.
+     */
     public int[] getPila() {
         int[] valores = new int[punteroPila + 1];
         System.arraycopy(pila, 0, valores, 0, punteroPila + 1);
         return valores;
     }
 
-    /** @return la cantidad de valores presentes en la pila. */
+    /**
+     * Obtiene la cantidad de valores almacenados en la pila.
+     *
+     * @return la cantidad de valores presentes.
+     */
     public int getCantidadEnPila() {
         return punteroPila + 1;
     }
 
-    /** @return la posición del último valor en la pila. */
+    /**
+     * Obtiene la posición del último valor de la pila.
+     *
+     * @return la posición del tope, o {@code -1} si la pila está vacía.
+     */
     public int getPunteroPila() {
         return punteroPila;
     }
 
-    /** @return la capacidad máxima de la pila. */
+    /**
+     * Obtiene la capacidad máxima de la pila.
+     *
+     * @return la cantidad máxima de valores permitidos.
+     */
     public int getCapacidadPila() {
         return pila.length;
     }
 
-    /** Asigna el identificador de la CPU en la que se ejecuta el proceso. */
+    /**
+     * Asigna la CPU en la que se ejecuta el proceso.
+     *
+     * @param cpuActual identificador de la CPU.
+     */
     public void setCpuActual(int cpuActual) {
         if (cpuActual < 0) {
             throw new IllegalArgumentException("El identificador de CPU no puede ser negativo.");
@@ -138,32 +160,75 @@ public class BCP {
         this.cpuActual = cpuActual;
     }
 
-    /** @return el identificador de CPU, o -1 si aún no se ha asignado. */
+    /**
+     * Obtiene el identificador de la CPU asignada.
+     *
+     * @return el identificador de CPU, o {@code -1} si no está asignada.
+     */
     public int getCpuActual() {
         return cpuActual;
     }
 
-    /** Registra un segundo simulado de uso de CPU. */
+    /**
+     * Incrementa el tiempo empleado en un segundo.
+     */
     public void aumentarTiempoEmpleado() {
-        tiempoEmpleadoSegundos++;
+        aumentarTiempoEmpleado(1);
     }
 
-    /** @return el tiempo simulado de CPU consumido, en segundos. */
+    /**
+     * Acumula segundos en el tiempo empleado.
+     *
+     * @param segundos cantidad de segundos que se desea sumar.
+     */
+    public void aumentarTiempoEmpleado(long segundos) {
+        if (segundos < 0) {
+            throw new IllegalArgumentException("El tiempo empleado no puede ser negativo.");
+        }
+        tiempoEmpleadoSegundos += segundos;
+    }
+
+    /**
+     * Obtiene el tiempo empleado por el proceso.
+     *
+     * @return el tiempo empleado en segundos.
+     */
     public long getTiempoEmpleadoSegundos() {
         return tiempoEmpleadoSegundos;
     }
 
-    /** @return la fecha y hora de la primera ejecución, o null si aún no inició. */
+    /**
+     * Obtiene la duración total del proceso.
+     *
+     * @return la duración en segundos.
+     */
+    public long getTiempoTotalSegundos() {
+        return tiempoEmpleadoSegundos;
+    }
+
+    /**
+     * Obtiene la fecha de inicio del proceso.
+     *
+     * @return la fecha de inicio, o {@code null} si aún no inició.
+     */
     public LocalDateTime getTiempoInicio() {
         return tiempoInicio;
     }
 
-    /** @return la fecha y hora de finalización, o null si aún no terminó. */
+    /**
+     * Obtiene la fecha de finalización del proceso.
+     *
+     * @return la fecha de finalización, o {@code null} si aún no terminó.
+     */
     public LocalDateTime getTiempoFinal() {
         return tiempoFinal;
     }
 
-    /** Enlaza este BCP con la dirección en memoria del siguiente BCP. */
+    /**
+     * Asigna la dirección del siguiente BCP.
+     *
+     * @param direccion dirección del siguiente BCP, o {@code -1} si no hay otro.
+     */
     public void setDireccionSiguienteBCP(int direccion) {
         if (direccion < -1) {
             throw new IllegalArgumentException("La dirección del siguiente BCP no es válida.");
@@ -171,100 +236,176 @@ public class BCP {
         direccionSiguienteBCP = direccion;
     }
 
-    /** @return la dirección del siguiente BCP, o -1 si no hay otro. */
+    /**
+     * Obtiene la dirección del siguiente BCP.
+     *
+     * @return la dirección del siguiente BCP, o {@code -1} si no hay otro.
+     */
     public int getDireccionSiguienteBCP() {
         return direccionSiguienteBCP;
     }
 
 
     /**
-     * Obtiene la instrucción guardada en el IR con formato ensamblador legible.
+     * Traduce la instrucción guardada en el IR a ensamblador.
      *
-     * @return la instrucción almacenada en el IR, o una cadena vacía si no hay
-     *     una instrucción guardada.
+     * @return la instrucción en ensamblador, o una cadena vacía si no hay una instrucción.
      */
     public String getIrToString() {
         return new Parser().traducirInstruccion(ir);
     }
 
-    /** Establece el estado del proceso como {@code NUEVO}. */
+    /**
+     * Establece el estado del proceso como NUEVO.
+     */
     public void setEstadoNuevo() {
         this.estado = "NUEVO";
     }
 
 
-    /** Establece el estado del proceso como {@code LISTO}. */
+    /**
+     * Establece el estado del proceso como LISTO.
+     */
     public void setEstadoListo() {
         this.estado = "LISTO";
     }
 
-    /** Establece el estado como EJECUTANDO y registra el primer inicio. */
+    /**
+     * Establece el estado EJECUTANDO y registra el primer inicio.
+     */
     public void setEstadoEjecutando() {
+        setEstadoEjecutando(LocalDateTime.now());
+    }
+
+    /**
+     * Establece el estado EJECUTANDO con la fecha de inicio indicada.
+     *
+     * @param instante fecha de inicio que se desea registrar por primera vez.
+     */
+    public void setEstadoEjecutando(LocalDateTime instante) {
+        if (instante == null) {
+            throw new IllegalArgumentException("La fecha de inicio no puede ser nula.");
+        }
         this.estado = "EJECUTANDO";
         if (tiempoInicio == null) {
-            tiempoInicio = LocalDateTime.now();
+            tiempoInicio = instante;
         }
     }
 
-    /** Establece el estado del proceso como EN_ESPERA. */
+    /**
+     * Establece el estado del proceso como EN_ESPERA.
+     */
     public void setEstadoBloqueado() {
         this.estado = "EN_ESPERA";
     }
 
-    /** Establece el estado del proceso como SUSPENDIDO. */
+    /**
+     * Establece el estado del proceso como SUSPENDIDO.
+     */
     public void setEstadoSuspendido() {
         this.estado = "SUSPENDIDO";
     }
 
-    /** Establece el estado del proceso como LISTO_SUSPENDIDO. */
+    /**
+     * Establece el estado del proceso como LISTO_SUSPENDIDO.
+     */
     public void setEstadoListoSuspendido() {
         this.estado = "LISTO_SUSPENDIDO";
     }
 
-    /** Establece el estado como TERMINADO y registra su finalización. */
+    /**
+     * Finaliza el proceso con la fecha calculada según su duración acumulada.
+     */
     public void setEstadoTerminado() {
+        if (tiempoInicio == null) {
+            tiempoInicio = LocalDateTime.now();
+        }
+        setEstadoTerminado(tiempoInicio.plusSeconds(tiempoEmpleadoSegundos));
+    }
+
+    /**
+     * Establece el estado TERMINADO y registra la primera finalización.
+     *
+     * @param instante fecha de finalización que se desea registrar.
+     */
+    public void setEstadoTerminado(LocalDateTime instante) {
+        if (instante == null) {
+            throw new IllegalArgumentException("La fecha de finalización no puede ser nula.");
+        }
         this.estado = "TERMINADO";
         if (tiempoFinal == null) {
-            tiempoFinal = LocalDateTime.now();
+            tiempoFinal = instante;
         }
     }
 
-    /** @return el identificador del proceso. */
+    /**
+     * Obtiene el identificador del proceso.
+     *
+     * @return el identificador del proceso.
+     */
     public int getIdProceso() {
         return idProceso;
     }
     
-    /** @return el estado actual del proceso. */
+    /**
+     * Obtiene el estado actual del proceso.
+     *
+     * @return el estado del proceso.
+     */
     public String getEstado() {
         return estado;
     }
 
-    /** @return la prioridad asignada al proceso. */
+    /**
+     * Obtiene la prioridad asignada al proceso.
+     *
+     * @return la prioridad del proceso.
+     */
     public int getPrioridad() {
         return prioridad;
     }
 
-    /** @return el valor guardado del contador de programa (PC). */
+    /**
+     * Obtiene el contador de programa guardado.
+     *
+     * @return el valor del PC.
+     */
     public int getPc() {
         return pc;
     }
 
-    /** @return la primera posición de memoria asignada al proceso. */
+    /**
+     * Obtiene el inicio de la memoria del proceso.
+     *
+     * @return la primera posición de memoria asignada.
+     */
     public int getInicioMemoria() {
         return inicioMemoria;
     }
 
-    /** @return la última posición de memoria asignada al proceso. */
+    /**
+     * Obtiene el final de la memoria del proceso.
+     *
+     * @return la última posición de memoria asignada.
+     */
     public int getFinMemoria() {
         return finMemoria;
     }
 
-    /** @return la dirección base del programa en memoria. */
+    /**
+     * Obtiene la dirección base del programa.
+     *
+     * @return la dirección inicial del programa en memoria.
+     */
     public int getBase() {
         return inicioMemoria;
     }
 
-    /** @return el tamaño del programa, incluyendo ambas direcciones límite. */
+    /**
+     * Obtiene el tamaño del programa en memoria.
+     *
+     * @return la cantidad de posiciones de memoria del programa.
+     */
     public int getAlcance() {
         return finMemoria - inicioMemoria + 1;
     }
@@ -272,8 +413,7 @@ public class BCP {
     /**
      * Obtiene una copia de la instrucción guardada en el IR.
      *
-     * @return una copia de la instrucción, o {@code null} si no hay una
-     *     instrucción guardada.
+     * @return una copia de la instrucción, o {@code null} si no hay una instrucción.
      */
     public String[] getIr() {
         if (ir == null) {
@@ -282,32 +422,56 @@ public class BCP {
         return ir.clone();
     }
 
-    /** @return el valor guardado del acumulador (AC). */
+    /**
+     * Obtiene el valor guardado del acumulador.
+     *
+     * @return el valor de AC.
+     */
     public int getAc() {
         return ac;
     }
     
-    /** @return el valor guardado del registro AX. */
+    /**
+     * Obtiene el valor guardado del registro AX.
+     *
+     * @return el valor de AX.
+     */
     public int getAx() {
         return ax;
     }
     
-    /** @return el valor guardado del registro BX. */
+    /**
+     * Obtiene el valor guardado del registro BX.
+     *
+     * @return el valor de BX.
+     */
     public int getBx() {
         return bx;
     }
 
-    /** @return el valor guardado del registro CX. */
+    /**
+     * Obtiene el valor guardado del registro CX.
+     *
+     * @return el valor de CX.
+     */
     public int getCx() {
         return cx;
     }
     
-    /** @return el contenido guardado del registro DX. */
+    /**
+     * Obtiene el contenido guardado del registro DX.
+     *
+     * @return el contenido de DX.
+     */
     public String getDx() {
         return dx;
     }
 
-    /** @return si los registros de la última comparación guardada eran iguales. */
+    /**
+     * Comprueba el resultado de la última comparación guardada.
+     *
+     * @return {@code true} si los registros comparados eran iguales.
+     */
     public boolean esIgual() {
         return flag;
     }
