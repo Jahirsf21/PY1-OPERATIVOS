@@ -22,7 +22,7 @@ public class CPU {
         reiniciar();
     }
 
-    /** Ejecuta una instrucción cargada por el controlador. */
+    /** Ejecuta una instrucción validada por el parser y cargada por el controlador. */
     public void ejecutarInstruccion(String[] instruccion) {
         if (instruccion == null || instruccion.length == 0) {
             throw new IllegalArgumentException("La instrucción no puede ser nula ni vacía.");
@@ -31,7 +31,6 @@ public class CPU {
         String operador = ir[0];
         switch (operador) {
             case "MOV":
-                validarCantidadOperandos(3);
                 String registro = ir[1];
                 String origen = ir[2];
                 if ("DX".equals(registro) && "DX".equals(origen)) {
@@ -41,23 +40,39 @@ public class CPU {
                 escribirRegistro(registro, valor);
                 break;
             case "LOAD":
-                validarCantidadOperandos(2);
                 ac = leerRegistro(ir[1]);
                 break;
             case "STORE":
-                validarCantidadOperandos(2);
                 escribirRegistro(ir[1], ac);
                 break;
             case "ADD":
-                validarCantidadOperandos(2);
                 ac = ac + leerRegistro(ir[1]);
                 break;
             case "SUB":
-                validarCantidadOperandos(2);
                 ac = ac - leerRegistro(ir[1]);
                 break;
-            default:
+            case "INC":
+                if (ir[1].isEmpty()) {
+                    ac++;
+                } else {
+                    escribirRegistro(ir[1], leerRegistro(ir[1]) + 1);
+                }
                 break;
+            case "DEC":
+                if (ir[1].isEmpty()) {
+                    ac--;
+                } else {
+                    escribirRegistro(ir[1], leerRegistro(ir[1]) - 1);
+                }
+                break;
+            case "SWAP":
+                int primerValor = leerRegistro(ir[1]);
+                int segundoValor = leerRegistro(ir[2]);
+                escribirRegistro(ir[1], segundoValor);
+                escribirRegistro(ir[2], primerValor);
+                break;
+            default:
+                throw new IllegalArgumentException("La instrucción " + operador + " todavía no está implementada en la CPU.");
         }
     }
 
@@ -108,15 +123,7 @@ public class CPU {
 
     /** Comprueba si un valor corresponde a un registro. */
     private boolean esRegistro(String valor) {
-        return "AX".equals(valor) || "BX".equals(valor)
-                || "CX".equals(valor) || "DX".equals(valor);
-    }
-
-    /** Comprueba que la instrucción tenga los operandos requeridos. */
-    private void validarCantidadOperandos(int cantidad) {
-        if (ir.length < cantidad) {
-            throw new IllegalArgumentException("La instrucción " + ir[0] + " no tiene los operandos requeridos.");
-        }
+        return "AX".equals(valor) || "BX".equals(valor) || "CX".equals(valor) || "DX".equals(valor);
     }
 
     /** Reinicia los registros de la CPU. */
