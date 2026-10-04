@@ -3,7 +3,6 @@ package com.mycompany.t1operativos;
 import com.mycompany.t1operativos.gui.Aplicacion;
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import javax.swing.JOptionPane;
@@ -477,7 +476,11 @@ public class Controlador {
             "cx",
             "dx",
             "flag",
-            "pila",
+            "pila1",
+            "pila2",
+            "pila3",
+            "pila4",
+            "pila5",
             "punteroPila",
             "cpuActual",
             "tiempoInicio",
@@ -490,7 +493,9 @@ public class Controlador {
             String.valueOf(bcp.getInicioMemoria()), String.valueOf(bcp.getFinMemoria()),
             bcp.getIrToString(), String.valueOf(bcp.getAc()), String.valueOf(bcp.getAx()),
             String.valueOf(bcp.getBx()), String.valueOf(bcp.getCx()), bcp.getDx(),
-            String.valueOf(bcp.esIgual()), Arrays.toString(bcp.getPila()),
+            String.valueOf(bcp.esIgual()), String.valueOf(bcp.getValorPila(0)),
+            String.valueOf(bcp.getValorPila(1)), String.valueOf(bcp.getValorPila(2)),
+            String.valueOf(bcp.getValorPila(3)), String.valueOf(bcp.getValorPila(4)),
             String.valueOf(bcp.getPunteroPila()), String.valueOf(bcp.getCpuActual()),
             String.valueOf(bcp.getTiempoInicio()), String.valueOf(bcp.getTiempoFinal()),
             String.valueOf(bcp.getTiempoTotalSegundos()), String.valueOf(bcp.getDireccionSiguienteBCP())
@@ -550,7 +555,11 @@ public class Controlador {
                 + "\nCX: " + bcp.getCx()
                 + "\nDX: " + bcp.getDx()
                 + "\nFlag: " + bcp.esIgual()
-                + "\nPila: " + Arrays.toString(bcp.getPila())
+                + "\nPila 1: " + bcp.getValorPila(0)
+                + "\nPila 2: " + bcp.getValorPila(1)
+                + "\nPila 3: " + bcp.getValorPila(2)
+                + "\nPila 4: " + bcp.getValorPila(3)
+                + "\nPila 5: " + bcp.getValorPila(4)
                 + "\nPuntero pila: " + bcp.getPunteroPila()
                 + "\nCPU actual: " + bcp.getCpuActual()
                 + "\nInicio ejecución: " + (bcp.getTiempoInicio() == null ? "-" : bcp.getTiempoInicio().toString())

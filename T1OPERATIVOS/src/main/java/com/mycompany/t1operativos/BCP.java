@@ -21,7 +21,11 @@ public class BCP {
     private int cx;
     private String dx;
     private boolean flag;
-    private int[] pila;
+    private int pila1;
+    private int pila2;
+    private int pila3;
+    private int pila4;
+    private int pila5;
     private int punteroPila;
     private int cpuActual;
     private LocalDateTime tiempoInicio;
@@ -51,7 +55,11 @@ public class BCP {
         this.cx = 0;
         this.dx = "";
         this.flag = false;
-        this.pila = new int[5];
+        this.pila1 = 0;
+        this.pila2 = 0;
+        this.pila3 = 0;
+        this.pila4 = 0;
+        this.pila5 = 0;
         this.punteroPila = -1;
         this.cpuActual = -1;
         this.tiempoInicio = null;
@@ -90,10 +98,11 @@ public class BCP {
      * @param valor valor que se desea apilar.
      */
     public void apilar(int valor) {
-        if (punteroPila >= pila.length - 1) {
+        if (punteroPila >= getCapacidadPila() - 1) {
             throw new IllegalStateException("Desbordamiento de pila: capacidad máxima de 5 valores.");
         }
-        pila[++punteroPila] = valor;
+        setValorPila(punteroPila + 1, valor);
+        punteroPila++;
     }
 
     /**
@@ -105,19 +114,73 @@ public class BCP {
         if (punteroPila < 0) {
             throw new IllegalStateException("La pila está vacía.");
         }
-        int valor = pila[punteroPila];
-        pila[punteroPila--] = 0;
+        int valor = getValorPila(punteroPila);
+        setValorPila(punteroPila, 0);
+        punteroPila--;
         return valor;
     }
 
     /**
-     * Obtiene los valores almacenados en la pila.
+     * Obtiene el valor del atributo de una posición de la pila.
      *
-     * @return una copia de los valores de la pila.
+     * @param posicion índice de la posición, de 0 a 4.
+     * @return el valor almacenado en esa posición.
+     */
+    public int getValorPila(int posicion) {
+        switch (posicion) {
+            case 0:
+                return pila1;
+            case 1:
+                return pila2;
+            case 2:
+                return pila3;
+            case 3:
+                return pila4;
+            case 4:
+                return pila5;
+            default:
+                throw new IllegalArgumentException("Posición de pila inválida: " + posicion);
+        }
+    }
+
+    /**
+     * Actualiza el atributo de una posición de la pila.
+     *
+     * @param posicion índice de la posición, de 0 a 4.
+     * @param valor valor que se desea almacenar.
+     */
+    private void setValorPila(int posicion, int valor) {
+        switch (posicion) {
+            case 0:
+                pila1 = valor;
+                break;
+            case 1:
+                pila2 = valor;
+                break;
+            case 2:
+                pila3 = valor;
+                break;
+            case 3:
+                pila4 = valor;
+                break;
+            case 4:
+                pila5 = valor;
+                break;
+            default:
+                throw new IllegalArgumentException("Posición de pila inválida: " + posicion);
+        }
+    }
+
+    /**
+     * Reúne los valores ocupados de la pila sin modificar sus atributos.
+     *
+     * @return un arreglo nuevo con los valores desde el fondo al tope.
      */
     public int[] getPila() {
         int[] valores = new int[punteroPila + 1];
-        System.arraycopy(pila, 0, valores, 0, punteroPila + 1);
+        for (int i = 0; i < valores.length; i++) {
+            valores[i] = getValorPila(i);
+        }
         return valores;
     }
 
@@ -145,7 +208,7 @@ public class BCP {
      * @return la cantidad máxima de valores permitidos.
      */
     public int getCapacidadPila() {
-        return pila.length;
+        return 5;
     }
 
     /**
