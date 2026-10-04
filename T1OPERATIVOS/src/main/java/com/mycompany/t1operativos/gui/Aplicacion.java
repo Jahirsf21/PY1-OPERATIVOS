@@ -27,17 +27,19 @@ public class Aplicacion extends JFrame {
     private JButton btnLimpiar;
     private JButton btnCargarArchivo;
 
-    private JTable tablaInstrucciones;
     private JTable tablaMemoria;
+    private JTable tablaDisco;
     private JTextArea areaBCP;
     private JSpinner selectorMemoria;
     private JLabel lblDistribucionMemoria;
+    private JSpinner selectorDisco;
+    private JLabel lblDistribucionDisco;
     private JLabel lblEstadoEjecucion;
     private JTextArea pantalla;
     private int inicioEntradaConsola = -1;
     private boolean actualizandoConsola;
-    private DefaultTableModel modeloInstrucciones;
     private DefaultTableModel modeloMemoria;
+    private DefaultTableModel modeloDisco;
     /**
      * Construye e inicializa la ventana principal.
      */
@@ -96,9 +98,21 @@ public class Aplicacion extends JFrame {
         selectorMemoria.addChangeListener(e -> actualizarDistribucionMemoria());
         actualizarDistribucionMemoria();
 
+        JPanel panelDisco = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        panelDisco.add(new JLabel("Disco total:"));
+        selectorDisco = new JSpinner(new SpinnerNumberModel(512, 256, null, 4));
+        JSpinner.DefaultEditor editorDisco = (JSpinner.DefaultEditor) selectorDisco.getEditor();
+        editorDisco.getTextField().setEditable(false);
+        panelDisco.add(selectorDisco);
+        lblDistribucionDisco = new JLabel();
+        panelDisco.add(lblDistribucionDisco);
+        selectorDisco.addChangeListener(e -> actualizarDistribucionDisco());
+        actualizarDistribucionDisco();
+
         panel.add(panelBotonesAccion);
         panel.add(panelCargarArchivo);
         panel.add(panelMemoria);
+        panel.add(panelDisco);
 
         JPanel panelEjecucion = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         lblEstadoEjecucion = new JLabel("Sin programa cargado.");
@@ -109,27 +123,13 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Crea las tablas de instrucciones y memoria.
+     * Crea las tablas de RAM y disco visibles juntas.
      *
      * @return el panel con las tablas.
      */
     private JPanel crearPanelTablas() {
         JPanel panel = new JPanel(new BorderLayout(10, 0));
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        modeloInstrucciones = new DefaultTableModel(new Object[]{"Instrucción"}, 0) {
-            @Override
-            public boolean isCellEditable(int row, int col) {
-                return false;
-            }
-        };
-
-        tablaInstrucciones = new JTable(modeloInstrucciones);
-        tablaInstrucciones.getTableHeader().setReorderingAllowed(false);
-        tablaInstrucciones.setCellSelectionEnabled(false);
-        tablaInstrucciones.setRowSelectionAllowed(true);
-        tablaInstrucciones.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        panel.add(new JScrollPane(tablaInstrucciones), BorderLayout.CENTER);
 
         modeloMemoria = new DefaultTableModel(new Object[]{"Posición", "Valor en memoria"}, 0) {
             @Override
@@ -153,7 +153,34 @@ public class Aplicacion extends JFrame {
             columna.setResizable(false);
         }
         tablaMemoria.setPreferredScrollableViewportSize(new Dimension(tablaMemoria.getColumnModel().getTotalColumnWidth(), tablaMemoria.getPreferredScrollableViewportSize().height));
-        panel.add(new JScrollPane(tablaMemoria), BorderLayout.EAST);
+        JPanel panelMemoria = new JPanel(new BorderLayout());
+        panelMemoria.setBorder(BorderFactory.createTitledBorder("RAM"));
+        panelMemoria.add(new JScrollPane(tablaMemoria), BorderLayout.CENTER);
+        panel.add(panelMemoria, BorderLayout.WEST);
+
+        modeloDisco = new DefaultTableModel(new Object[]{"Posición", "Valor en disco"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int col) {
+                return false;
+            }
+        };
+        tablaDisco = new JTable(modeloDisco);
+        tablaDisco.getTableHeader().setReorderingAllowed(false);
+        tablaDisco.setCellSelectionEnabled(false);
+        tablaDisco.setRowSelectionAllowed(true);
+        tablaDisco.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        tablaDisco.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
+        TableColumn columnaPosicion = tablaDisco.getColumnModel().getColumn(0);
+        columnaPosicion.setMinWidth(60);
+        columnaPosicion.setMaxWidth(60);
+        columnaPosicion.setPreferredWidth(60);
+        columnaPosicion.setResizable(false);
+        tablaDisco.getColumnModel().getColumn(1).setPreferredWidth(260);
+        tablaDisco.setPreferredScrollableViewportSize(new Dimension(320, tablaDisco.getPreferredScrollableViewportSize().height));
+        JPanel panelDisco = new JPanel(new BorderLayout());
+        panelDisco.setBorder(BorderFactory.createTitledBorder("Disco"));
+        panelDisco.add(new JScrollPane(tablaDisco), BorderLayout.CENTER);
+        panel.add(panelDisco, BorderLayout.CENTER);
         return panel;
     }
 
@@ -373,6 +400,15 @@ public class Aplicacion extends JFrame {
     }
 
     /**
+     * Obtiene el tamaño de disco seleccionado.
+     *
+     * @return la cantidad seleccionada de posiciones del disco.
+     */
+    public int getDiscoSeleccionado() {
+        return (Integer) selectorDisco.getValue();
+    }
+
+    /**
      * Habilita o deshabilita los controles del programa.
      *
      * @param habilitados {@code true} para habilitar los controles.
@@ -393,13 +429,20 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Resalta la próxima instrucción en ambas tablas.
+     * Habilita o deshabilita el selector de disco.
      *
-     * @param filaInstruccion índice de la fila en la tabla de instrucciones.
+     * @param habilitado {@code true} para permitir cambiar el tamaño.
+     */
+    public void setSelectorDiscoHabilitado(boolean habilitado) {
+        selectorDisco.setEnabled(habilitado);
+    }
+
+    /**
+     * Resalta la próxima instrucción en RAM.
+     *
      * @param posicionMemoria posición de la instrucción en memoria.
      */
-    public void seleccionarProximaInstruccion(int filaInstruccion, int posicionMemoria) {
-        seleccionarFila(tablaInstrucciones, filaInstruccion);
+    public void seleccionarProximaInstruccion(int posicionMemoria) {
         seleccionarFila(tablaMemoria, posicionMemoria);
     }
 
@@ -407,8 +450,8 @@ public class Aplicacion extends JFrame {
      * Elimina la selección de ambas tablas.
      */
     public void limpiarSeleccionTablas() {
-        tablaInstrucciones.clearSelection();
         tablaMemoria.clearSelection();
+        tablaDisco.clearSelection();
     }
 
     /**
@@ -435,6 +478,17 @@ public class Aplicacion extends JFrame {
         int kernel = total / 4;
         int usuario = total - kernel;
         lblDistribucionMemoria.setText("SO: " + kernel + "  | Usuario: " + usuario);
+    }
+
+    /**
+     * Actualiza la distribución calculada del disco.
+     */
+    private void actualizarDistribucionDisco() {
+        int tamañoDisco = getDiscoSeleccionado();
+        int tamañoIndices = tamañoDisco / 20;
+        int tamañoMemoriaVirtual = tamañoDisco / 8;
+        int tamañoDatos = tamañoDisco - tamañoIndices - tamañoMemoriaVirtual;
+        lblDistribucionDisco.setText("Índices: " + tamañoIndices + "  | Datos: " + tamañoDatos + "  | Memoria virtual: " + tamañoMemoriaVirtual);
     }
 
     /**
@@ -487,12 +541,12 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Obtiene el modelo de la tabla de instrucciones.
+     * Obtiene el modelo de la tabla de disco.
      *
-     * @return el modelo de instrucciones.
+     * @return el modelo del disco.
      */
-    public DefaultTableModel getModeloInstrucciones() {
-        return modeloInstrucciones;
+    public DefaultTableModel getModeloDisco() {
+        return modeloDisco;
     }
 
     /**

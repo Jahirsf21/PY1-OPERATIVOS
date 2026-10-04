@@ -23,6 +23,7 @@ public class Controlador {
     private CargadorArchivos cargador;
     private Parser parser;
     private Memoria memoria;
+    private Disco disco;
     private CPU cpu;
     private BCP bcp;
     private int posicionBCP;
@@ -67,7 +68,7 @@ public class Controlador {
     }
 
     /**
-     * Carga un archivo, distribuye la memoria y crea el contexto del proceso.
+     * Guarda un archivo en disco, lo copia a RAM y crea el contexto del proceso.
      *
      * @param archivo archivo ensamblador seleccionado.
      */
@@ -77,8 +78,8 @@ public class Controlador {
         }
         try {
             int tamañoTotal = vista.getMemoriaSeleccionada();
-            if (tamañoTotal % 4 != 0) {
-                throw new IllegalArgumentException("La memoria total debe ser múltiplo de 4 para dividirla en 25% y 75%");
+            if (tamañoTotal < 128 || tamañoTotal % 4 != 0) {
+                throw new IllegalArgumentException("La memoria debe tener al menos 128 posiciones y ser múltiplo de 4 para dividirla en 25% y 75%.");
             }
             List<String[]> instrucciones = cargador.cargarArchivo(archivo.getAbsolutePath());
             List<String> errores = cargador.getErrores();
@@ -90,30 +91,122 @@ public class Controlador {
             if (instrucciones.isEmpty() || instrucciones.size() > tamañoUsuario) {
                 throw new IllegalArgumentException("El programa debe contener instrucciones y caber en el espacio de usuario.");
             }
+            int tamañoDisco = vista.getDiscoSeleccionado();
+            int tamañoIndices = tamañoDisco / 20;
+            int tamañoMemoriaVirtual = tamañoDisco / 8;
+            Disco nuevoDisco = copiarDisco(tamañoDisco, tamañoIndices, tamañoMemoriaVirtual);
+            int posicionIndice = buscarEntradaLibre(nuevoDisco, archivo.getName());
+            int direccionDisco = buscarEspacioLibre(nuevoDisco, instrucciones.size());
+            nuevoDisco.escribirIndice(posicionIndice, archivo.getName(), direccionDisco, instrucciones.size());
+            for (int i = 0; i < instrucciones.size(); i++) {
+                nuevoDisco.escribirDatos(direccionDisco + i, instrucciones.get(i));
+            }
             Memoria nuevaMemoria = new Memoria(tamañoTotal, tamañoKernel);
             for (int i = 0; i < instrucciones.size(); i++) {
-                nuevaMemoria.escribirUsuario(tamañoKernel + i, instrucciones.get(i));
+                nuevaMemoria.escribirUsuario(tamañoKernel + i, nuevoDisco.leer(direccionDisco + i));
             }
             int finPrograma = tamañoKernel + instrucciones.size() - 1;
+            CPU nuevaCPU = new CPU();
+            nuevaCPU.setPc(tamañoKernel);
+            BCP nuevoBCP = new BCP(1, 1, tamañoKernel, finPrograma);
+            nuevoBCP.setEstadoListo();
+            nuevoBCP.guardarContexto(nuevaCPU);
+
+            disco = nuevoDisco;
             memoria = nuevaMemoria;
-            cpu = new CPU();
-            cpu.setPc(tamañoKernel);
-            bcp = new BCP(1, 1, tamañoKernel, finPrograma);
-            bcp.setEstadoListo();
-            bcp.guardarContexto(cpu);
+            cpu = nuevaCPU;
+            bcp = nuevoBCP;
             posicionBCP = 0;
             reiniciarEjecucion();
-            llenarTablaInstrucciones(instrucciones);
+            actualizarTablaDisco();
             actualizarTablaMemoria();
             actualizarBCP();
             actualizarSeleccionProximaInstruccion();
             vista.setSelectorMemoriaHabilitado(false);
+            vista.setSelectorDiscoHabilitado(false);
             vista.setControlesProgramaHabilitados(true);
             vista.setTitle("Mini PC - " + archivo.getName());
             actualizarEstadoEjecucion();
         } catch (IOException | IllegalArgumentException | IllegalStateException ex) {
             mostrarError(ex.getMessage());
         }
+    }
+
+    /**
+     * Prepara una copia del disco sin alterar los archivos guardados.
+     *
+     * @param tamañoDisco cantidad de posiciones seleccionada en la vista.
+     * @param tamañoIndices cantidad de entradas calculada para el índice.
+     * @param tamañoMemoriaVirtual cantidad de posiciones calculada para el respaldo.
+     * @return el disco preparado para una nueva carga.
+     */
+    private Disco copiarDisco(int tamañoDisco, int tamañoIndices, int tamañoMemoriaVirtual) {
+        if (disco != null && disco.getTamañoTotal() != tamañoDisco) {
+            throw new IllegalStateException("Debe limpiar la simulación antes de cambiar el tamaño del disco.");
+        }
+        Disco nuevoDisco = new Disco(tamañoDisco, tamañoIndices, tamañoDisco - tamañoMemoriaVirtual);
+        if (disco != null) {
+            for (int posicion = 0; posicion < disco.getInicioDatos(); posicion++) {
+                String[] entrada = disco.leer(posicion);
+                if (entrada != null) {
+                    nuevoDisco.escribirIndice(posicion, entrada[0], Integer.parseInt(entrada[1]), Integer.parseInt(entrada[2]));
+                }
+            }
+            for (int posicion = disco.getInicioDatos(); posicion < disco.getInicioMemoriaVirtual(); posicion++) {
+                String[] contenido = disco.leer(posicion);
+                if (contenido != null) {
+                    nuevoDisco.escribirDatos(posicion, contenido);
+                }
+            }
+        }
+        return nuevoDisco;
+    }
+
+    /**
+     * Busca una entrada libre y rechaza nombres de archivo repetidos.
+     *
+     * @param discoDestino disco donde se guardará el archivo.
+     * @param nombre nombre del archivo seleccionado.
+     * @return la posición de la primera entrada libre.
+     */
+    private int buscarEntradaLibre(Disco discoDestino, String nombre) {
+        int posicionLibre = -1;
+        for (int posicion = 0; posicion < discoDestino.getInicioDatos(); posicion++) {
+            String[] entrada = discoDestino.leer(posicion);
+            if (entrada == null) {
+                if (posicionLibre < 0) {
+                    posicionLibre = posicion;
+                }
+            } else if (entrada[0].equalsIgnoreCase(nombre)) {
+                throw new IllegalArgumentException("El archivo " + nombre + " ya existe en el índice del disco.");
+            }
+        }
+        if (posicionLibre < 0) {
+            throw new IllegalStateException("El índice del disco no tiene entradas disponibles.");
+        }
+        return posicionLibre;
+    }
+
+    /**
+     * Busca un bloque libre suficiente en la zona de datos.
+     *
+     * @param discoDestino disco donde se guardará el contenido.
+     * @param cantidad cantidad de instrucciones del archivo.
+     * @return la dirección inicial del primer bloque disponible.
+     */
+    private int buscarEspacioLibre(Disco discoDestino, int cantidad) {
+        int posicionesLibres = 0;
+        for (int posicion = discoDestino.getInicioDatos(); posicion < discoDestino.getInicioMemoriaVirtual(); posicion++) {
+            if (discoDestino.leer(posicion) == null) {
+                posicionesLibres++;
+                if (posicionesLibres == cantidad) {
+                    return posicion - cantidad + 1;
+                }
+            } else {
+                posicionesLibres = 0;
+            }
+        }
+        throw new IllegalStateException("El disco no tiene un bloque de datos libre para las " + cantidad + " instrucciones del archivo.");
     }
 
     /**
@@ -446,15 +539,25 @@ public class Controlador {
     }
 
     /**
-     * Llena la tabla con las instrucciones en ensamblador.
-     *
-     * @param instrucciones lista de instrucciones procesadas.
+     * Muestra el índice, los archivos y la zona reservada del disco.
      */
-    private void llenarTablaInstrucciones(List<String[]> instrucciones) {
-        DefaultTableModel modelo = vista.getModeloInstrucciones();
+    private void actualizarTablaDisco() {
+        DefaultTableModel modelo = vista.getModeloDisco();
         modelo.setRowCount(0);
-        for (String[] instruccion : instrucciones) {
-            modelo.addRow(new Object[]{parser.traducirInstruccion(instruccion)});
+        if (disco == null) {
+            return;
+        }
+        for (int posicion = 0; posicion < disco.getTamañoTotal(); posicion++) {
+            String contenido = "";
+            String[] valor = disco.leer(posicion);
+            if (disco.esDireccionIndice(posicion)) {
+                contenido = valor == null ? "Índice (libre)" : "[" + valor[0] + ", " + valor[1] + ", " + valor[2] + "]";
+            } else if (disco.esDireccionMemoriaVirtual(posicion)) {
+                contenido = "Memoria virtual (sin uso)";
+            } else if (valor != null) {
+                contenido = parser.traducirInstruccion(valor);
+            }
+            modelo.addRow(new Object[]{posicion, contenido});
         }
     }
 
@@ -569,7 +672,7 @@ public class Controlador {
     }
 
     /**
-     * Resalta en ambas tablas la instrucción señalada actualmente por el PC.
+     * Resalta en RAM la instrucción señalada actualmente por el PC.
      */
     private void actualizarSeleccionProximaInstruccion() {
         if (cpu == null || memoria == null || bcp == null || "TERMINADO".equals(bcp.getEstado()) || !hayInstruccionPendiente()) {
@@ -577,24 +680,25 @@ public class Controlador {
             return;
         }
         int posicionMemoria = cpu.getPc();
-        int filaInstruccion = posicionMemoria - bcp.getInicioMemoria();
-        vista.seleccionarProximaInstruccion(filaInstruccion, posicionMemoria);
+        vista.seleccionarProximaInstruccion(posicionMemoria);
     }
 
     /**
-     * Elimina el programa cargado y restablece la interfaz.
+     * Vacía la simulación y conserva los tamaños seleccionados.
      */
     private void limpiar() {
         memoria = null;
+        disco = null;
         cpu = null;
         bcp = null;
         posicionBCP = -1;
-        vista.getModeloInstrucciones().setRowCount(0);
+        vista.getModeloDisco().setRowCount(0);
         vista.getModeloMemoria().setRowCount(0);
         vista.limpiarSeleccionTablas();
         vista.mostrarBCP("");
         vista.setControlesProgramaHabilitados(false);
         vista.setSelectorMemoriaHabilitado(true);
+        vista.setSelectorDiscoHabilitado(true);
         vista.setTitle("Mini PC");
         vista.getBtnCargarArchivo().setEnabled(true);
         reiniciarEjecucion();
