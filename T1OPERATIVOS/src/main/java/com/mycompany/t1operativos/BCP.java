@@ -42,12 +42,26 @@ public class BCP {
      * @param finMemoria última posición de memoria asignada.
      */
     public BCP(int idProceso, int prioridad, int inicioMemoria, int finMemoria) {
+        this(idProceso, prioridad);
+        asignarMemoria(inicioMemoria, finMemoria);
+    }
+
+    /**
+     * Construye el BCP de un trabajo pendiente.
+     *
+     * @param idProceso identificador positivo del proceso.
+     * @param prioridad prioridad asignada.
+     */
+    public BCP(int idProceso, int prioridad) {
+        if (idProceso <= 0) {
+            throw new IllegalArgumentException("El identificador del proceso debe ser positivo.");
+        }
         this.idProceso = idProceso;
         this.estado = "NUEVO";
         this.prioridad = prioridad;
-        this.pc = inicioMemoria;
-        this.inicioMemoria = inicioMemoria;
-        this.finMemoria = finMemoria;
+        this.pc = -1;
+        this.inicioMemoria = -1;
+        this.finMemoria = -1;
         this.ir = null;
         this.ac = 0;
         this.ax = 0;
@@ -69,6 +83,49 @@ public class BCP {
     }
 
     /**
+     * Registra la memoria del programa.
+     *
+     * @param inicio primera posición del programa.
+     * @param fin última posición del programa.
+     */
+    public void asignarMemoria(int inicio, int fin) {
+        if (!"NUEVO".equals(estado) || inicioMemoria != -1) {
+            throw new IllegalStateException("El proceso ya tiene memoria o dejó de ser nuevo.");
+        }
+        if (inicio < 0 || fin < inicio) {
+            throw new IllegalArgumentException("Los límites del programa no son válidos.");
+        }
+        inicioMemoria = inicio;
+        finMemoria = fin;
+        pc = inicio;
+    }
+
+    /**
+     * Restaura el contexto en la CPU.
+     *
+     * @param cpu CPU que recibirá los registros.
+     */
+    public void restaurarContexto(CPU cpu) {
+        cpu.cargarContexto(pc, ir, ac, ax, bx, cx, dx, flag);
+    }
+
+    /**
+     * Completa la entrada de teclado.
+     *
+     * @param valor entero de 0 a 255.
+     */
+    public void completarEntradaTeclado(int valor) {
+        if (valor < 0 || valor > 255) {
+            throw new IllegalArgumentException("El valor debe estar entre 0 y 255.");
+        }
+        if (!"EN_ESPERA".equals(estado)) {
+            throw new IllegalStateException("El proceso no está esperando una entrada de teclado.");
+        }
+        dx = Integer.toString(valor);
+        pc++;
+    }
+
+    /**
      * Guarda el contexto actual de la CPU.
      *
      * @param cpu CPU cuyo contexto se desea guardar.
@@ -78,12 +135,7 @@ public class BCP {
             throw new IllegalArgumentException("El cpu no puede ser nulo.");
         }
         this.pc = cpu.getPc();
-        String[] instruccionActual = cpu.getIr();
-        if (instruccionActual == null) {
-            this.ir = null;
-        } else {
-            this.ir = instruccionActual.clone();
-        }
+        this.ir = cpu.getIr();
         this.ac = cpu.getAc();
         this.ax = cpu.getAx();
         this.bx = cpu.getBx();
@@ -217,8 +269,8 @@ public class BCP {
      * @param cpuActual identificador de la CPU.
      */
     public void setCpuActual(int cpuActual) {
-        if (cpuActual < 0) {
-            throw new IllegalArgumentException("El identificador de CPU no puede ser negativo.");
+        if (cpuActual < -1) {
+            throw new IllegalArgumentException("El identificador de CPU no puede ser menor que -1.");
         }
         this.cpuActual = cpuActual;
     }
@@ -470,19 +522,19 @@ public class BCP {
      * @return la cantidad de posiciones de memoria del programa.
      */
     public int getAlcance() {
+        if (inicioMemoria == -1) {
+            return 0;
+        }
         return finMemoria - inicioMemoria + 1;
     }
 
     /**
-     * Obtiene una copia de la instrucción guardada en el IR.
+     * Obtiene la instrucción guardada en el IR.
      *
-     * @return una copia de la instrucción, o {@code null} si no hay una instrucción.
+     * @return la instrucción, o {@code null} si no hay una instrucción.
      */
     public String[] getIr() {
-        if (ir == null) {
-            return null;
-        }
-        return ir.clone();
+        return ir;
     }
 
     /**

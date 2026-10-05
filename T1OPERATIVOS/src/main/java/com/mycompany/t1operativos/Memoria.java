@@ -16,19 +16,74 @@ public class Memoria {
      * @param inicioUsuario primera posición del espacio de usuario.
      */
     public Memoria(int tamañoTotal, int inicioUsuario) {
+        if (inicioUsuario <= 0 || inicioUsuario >= tamañoTotal) {
+            throw new IllegalArgumentException("La memoria debe tener zonas de kernel y usuario válidas.");
+        }
         this.memoria = new String[tamañoTotal][];
         this.inicioUsuario = inicioUsuario;
+    }
+
+    /**
+     * Obtiene el inicio del espacio de usuario.
+     *
+     * @return primera posición de usuario.
+     */
+    public int getInicioUsuario() {
+        return inicioUsuario;
+    }
+
+    /**
+     * Vacía un bloque del kernel.
+     *
+     * @param inicio primera posición del bloque.
+     * @param cantidad cantidad de posiciones.
+     */
+    public void liberarKernel(int inicio, int cantidad) {
+        validarBloque(inicio, cantidad, 0, inicioUsuario);
+        for (int i = 0; i < cantidad; i++) {
+            memoria[inicio + i] = null;
+        }
+    }
+
+    /**
+     * Vacía un bloque de usuario.
+     *
+     * @param inicio primera posición del bloque.
+     * @param cantidad cantidad de posiciones.
+     */
+    public void liberarUsuario(int inicio, int cantidad) {
+        validarBloque(inicio, cantidad, inicioUsuario, memoria.length);
+        for (int i = 0; i < cantidad; i++) {
+            memoria[inicio + i] = null;
+        }
+    }
+
+    /**
+     * Valida el rango de un bloque.
+     *
+     * @param inicio primera posición.
+     * @param cantidad cantidad de posiciones.
+     * @param limiteInferior límite inclusivo.
+     * @param limiteSuperior límite exclusivo.
+     */
+    private void validarBloque(int inicio, int cantidad, int limiteInferior, int limiteSuperior) {
+        if (cantidad <= 0) {
+            throw new IllegalArgumentException("La cantidad de posiciones debe ser positiva.");
+        }
+        if (inicio < limiteInferior || cantidad > limiteSuperior - inicio) {
+            throw new IllegalArgumentException("El bloque no pertenece completo a la zona indicada.");
+        }
     }
 
     /**
      * Lee el contenido de una posición de memoria.
      *
      * @param posicion dirección que se desea leer.
-     * @return una copia del contenido, o {@code null} si la posición está vacía.
+     * @return el contenido, o {@code null} si la posición está vacía.
      */
     public String[] leer(int posicion) {
         validarDireccion(posicion);
-        return memoria[posicion] == null ? null : memoria[posicion].clone();
+        return memoria[posicion];
     }
 
     /**
@@ -42,7 +97,7 @@ public class Memoria {
         if (posicion < inicioUsuario) {
             throw new IllegalArgumentException("La posición no pertenece al espacio de usuario.");
         }
-        memoria[posicion] = instruccion == null ? null : instruccion.clone();
+        memoria[posicion] = instruccion;
     }
 
     /**

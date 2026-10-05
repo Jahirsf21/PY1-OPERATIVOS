@@ -14,6 +14,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.io.File;
+import java.util.Arrays;
 
 /**
  * Ventana principal de Mini PC.
@@ -26,9 +27,19 @@ public class Aplicacion extends JFrame {
     private JButton btnPasoAPaso;
     private JButton btnLimpiar;
     private JButton btnCargarArchivo;
+    /** Botón de estadísticas. */
+    private JButton btnEstadisticas;
+    /** Modal de estadísticas. */
+    private JDialog ventanaEstadisticas;
 
     private JTable tablaMemoria;
     private JTable tablaDisco;
+    /** Tabla de trabajos pendientes. */
+    private JTable tablaTrabajos;
+    /** Tabla de procesos cargados en RAM. */
+    private JTable tablaProcesos;
+    /** Tabla de tiempos por proceso. */
+    private JTable tablaEstadisticas;
     private JTextArea areaBCP;
     private JSpinner selectorMemoria;
     private JLabel lblDistribucionMemoria;
@@ -40,6 +51,12 @@ public class Aplicacion extends JFrame {
     private boolean actualizandoConsola;
     private DefaultTableModel modeloMemoria;
     private DefaultTableModel modeloDisco;
+    /** Filas de trabajos pendientes. */
+    private DefaultTableModel modeloTrabajos;
+    /** Filas de procesos cargados en RAM. */
+    private DefaultTableModel modeloProcesos;
+    /** Filas de estadísticas. */
+    private DefaultTableModel modeloEstadisticas;
     /**
      * Construye e inicializa la ventana principal.
      */
@@ -60,6 +77,10 @@ public class Aplicacion extends JFrame {
         add(crearPanelTablas(), BorderLayout.CENTER);
         add(crearPanelBCP(), BorderLayout.EAST);
         add(crearPanelConsola(), BorderLayout.SOUTH);
+        ventanaEstadisticas = new JDialog(this, "Estadísticas", true);
+        ventanaEstadisticas.setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+        ventanaEstadisticas.setContentPane(crearPanelEstadisticas());
+        ventanaEstadisticas.setSize(650, 350);
     }
 
     /**
@@ -81,10 +102,13 @@ public class Aplicacion extends JFrame {
         panelBotonesAccion.add(btnEjecutar);
         panelBotonesAccion.add(btnPasoAPaso);
         panelBotonesAccion.add(btnLimpiar);
+        btnEstadisticas = new JButton("Estadísticas");
+        btnEstadisticas.addActionListener(e -> mostrarEstadisticas());
+        panelBotonesAccion.add(btnEstadisticas);
 
         JPanel panelCargarArchivo = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
-        btnCargarArchivo = new JButton("Cargar archivo");
-        btnCargarArchivo.addActionListener(e -> abrirSelectorArchivo());
+        btnCargarArchivo = new JButton("Cargar archivos");
+        btnCargarArchivo.addActionListener(e -> abrirSelectorArchivos());
         panelCargarArchivo.add(btnCargarArchivo);
 
         JPanel panelMemoria = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
@@ -123,13 +147,14 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Crea las tablas de RAM y disco visibles juntas.
+     * Crea las tablas de recursos, trabajos y procesos.
      *
      * @return el panel con las tablas.
      */
     private JPanel crearPanelTablas() {
-        JPanel panel = new JPanel(new BorderLayout(10, 0));
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        JPanel recursos = new JPanel(new BorderLayout(10, 0));
 
         modeloMemoria = new DefaultTableModel(new Object[]{"Posición", "Valor en memoria"}, 0) {
             @Override
@@ -156,7 +181,7 @@ public class Aplicacion extends JFrame {
         JPanel panelMemoria = new JPanel(new BorderLayout());
         panelMemoria.setBorder(BorderFactory.createTitledBorder("RAM"));
         panelMemoria.add(new JScrollPane(tablaMemoria), BorderLayout.CENTER);
-        panel.add(panelMemoria, BorderLayout.WEST);
+        recursos.add(panelMemoria, BorderLayout.WEST);
 
         modeloDisco = new DefaultTableModel(new Object[]{"Posición", "Valor en disco"}, 0) {
             @Override
@@ -180,8 +205,105 @@ public class Aplicacion extends JFrame {
         JPanel panelDisco = new JPanel(new BorderLayout());
         panelDisco.setBorder(BorderFactory.createTitledBorder("Disco"));
         panelDisco.add(new JScrollPane(tablaDisco), BorderLayout.CENTER);
-        panel.add(panelDisco, BorderLayout.CENTER);
+        recursos.add(panelDisco, BorderLayout.CENTER);
+        panel.add(recursos, BorderLayout.CENTER);
+        JPanel listas = new JPanel(new GridLayout(1, 2, 10, 0));
+        listas.add(crearPanelTrabajos());
+        listas.add(crearPanelProcesos());
+        panel.add(listas, BorderLayout.SOUTH);
         return panel;
+    }
+
+    /**
+     * Crea la tabla de trabajos pendientes.
+     *
+     * @return panel de trabajos y estados.
+     */
+    private JPanel crearPanelTrabajos() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder("Lista de Trabajos"));
+        modeloTrabajos = new DefaultTableModel(new Object[]{"Trabajos", "Estados"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int col) {
+                return false;
+            }
+        };
+        tablaTrabajos = new JTable(modeloTrabajos);
+        tablaTrabajos.getTableHeader().setReorderingAllowed(false);
+        tablaTrabajos.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        configurarTablaLista(tablaTrabajos);
+        panel.add(new JScrollPane(tablaTrabajos), BorderLayout.CENTER);
+        return panel;
+    }
+
+    /**
+     * Crea la tabla de procesos cargados en RAM.
+     *
+     * @return panel de procesos y estados.
+     */
+    private JPanel crearPanelProcesos() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder("Lista de Procesos"));
+        modeloProcesos = new DefaultTableModel(new Object[]{"Procesos", "Estados"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int col) {
+                return false;
+            }
+        };
+        tablaProcesos = new JTable(modeloProcesos);
+        tablaProcesos.getTableHeader().setReorderingAllowed(false);
+        tablaProcesos.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        configurarTablaLista(tablaProcesos);
+        panel.add(new JScrollPane(tablaProcesos), BorderLayout.CENTER);
+        return panel;
+    }
+
+    /**
+     * Ajusta una lista al panel y bloquea el ajuste manual.
+     *
+     * @param tabla tabla de trabajos o procesos.
+     */
+    private void configurarTablaLista(JTable tabla) {
+        tabla.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+        tabla.setFillsViewportHeight(true);
+        tabla.getTableHeader().setResizingAllowed(false);
+        int ancho = 150;
+        for (int i = 0; i < tabla.getColumnCount(); i++) {
+            TableColumn columna = tabla.getColumnModel().getColumn(i);
+            columna.setPreferredWidth(ancho);
+            columna.setWidth(ancho);
+            columna.setResizable(false);
+        }
+        tabla.setPreferredScrollableViewportSize(new Dimension(tabla.getColumnModel().getTotalColumnWidth(), 100));
+    }
+
+    /**
+     * Crea la tabla de estadísticas.
+     *
+     * @return panel de tiempos por proceso.
+     */
+    private JPanel crearPanelEstadisticas() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        modeloEstadisticas = new DefaultTableModel(new Object[]{"Proceso", "Inicio", "Finalización", "Duración (s)"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int col) {
+                return false;
+            }
+        };
+        tablaEstadisticas = new JTable(modeloEstadisticas);
+        tablaEstadisticas.getTableHeader().setReorderingAllowed(false);
+        tablaEstadisticas.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        panel.add(new JScrollPane(tablaEstadisticas), BorderLayout.CENTER);
+        return panel;
+    }
+
+    /**
+     * Muestra las estadísticas.
+     */
+    private void mostrarEstadisticas() {
+        ventanaEstadisticas.setLocationRelativeTo(this);
+        ventanaEstadisticas.setVisible(true);
     }
 
     /**
@@ -260,8 +382,10 @@ public class Aplicacion extends JFrame {
                 if (inicioEntradaConsola < 0 || posicion < inicioEntradaConsola) {
                     return;
                 }
-                if (texto != null && (texto.contains("\n") || texto.contains("\r"))) {
-                    return;
+                if (texto != null) {
+                    if (texto.contains("\n") || texto.contains("\r")) {
+                        return;
+                    }
                 }
                 filtro.replace(posicion, longitud, texto, atributos);
             }
@@ -324,20 +448,51 @@ public class Aplicacion extends JFrame {
      * @param texto texto que se desea mostrar.
      */
     public void imprimirPantalla(String texto) {
-        String entrada = getTextoEntradaTeclado();
         actualizandoConsola = true;
         try {
             if (inicioEntradaConsola >= 0) {
-                pantalla.append("\n" + texto + "\n");
-                inicioEntradaConsola = pantalla.getDocument().getLength();
-                pantalla.append(entrada);
+                int inicioLinea = pantalla.getText().lastIndexOf('\n', inicioEntradaConsola - 1) + 1;
+                int posicion = pantalla.getCaret().getDot();
+                int marca = pantalla.getCaret().getMark();
+                String mensaje = texto + "\n";
+                pantalla.insert(mensaje, inicioLinea);
+                inicioEntradaConsola += mensaje.length();
+                if (marca >= inicioLinea) {
+                    marca += mensaje.length();
+                }
+                if (posicion >= inicioLinea) {
+                    posicion += mensaje.length();
+                }
+                pantalla.setCaretPosition(marca);
+                pantalla.moveCaretPosition(posicion);
             } else {
                 pantalla.append(texto + "\n");
+                pantalla.setCaretPosition(pantalla.getDocument().getLength());
             }
         } finally {
             actualizandoConsola = false;
         }
-        pantalla.setCaretPosition(pantalla.getDocument().getLength());
+    }
+
+    /**
+     * Muestra una solicitud de teclado.
+     *
+     * @param idProceso identificador del solicitante.
+     */
+    public void mostrarSolicitudTeclado(int idProceso) {
+        if (idProceso <= 0) {
+            throw new IllegalArgumentException("El identificador del solicitante debe ser positivo.");
+        }
+        if (inicioEntradaConsola >= 0) {
+            throw new IllegalStateException("Ya existe una entrada de teclado activa.");
+        }
+        actualizandoConsola = true;
+        try {
+            pantalla.append("Proceso " + idProceso + ": >> Ingresar valor: ");
+        } finally {
+            actualizandoConsola = false;
+        }
+        setEntradaTecladoHabilitada(true);
     }
 
     /**
@@ -492,15 +647,16 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Selecciona un archivo ensamblador y notifica su carga.
+     * Selecciona archivos ensamblador.
      */
-    private void abrirSelectorArchivo() {
+    private void abrirSelectorArchivos() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileFilter(new FileNameExtensionFilter("Archivos ASM (*.asm)", "asm"));
+        fileChooser.setMultiSelectionEnabled(true);
         int resultado = fileChooser.showOpenDialog(this);
         if (resultado == JFileChooser.APPROVE_OPTION) {
-            File archivo = fileChooser.getSelectedFile();
-            firePropertyChange("Archivo cargado", null, archivo);
+            File[] archivos = fileChooser.getSelectedFiles();
+            firePropertyChange("Archivos cargados", null, Arrays.asList(archivos));
         }
     }
 
@@ -534,7 +690,7 @@ public class Aplicacion extends JFrame {
     /**
      * Obtiene el botón de carga de archivos.
      *
-     * @return el botón Cargar archivo.
+     * @return el botón Cargar archivos.
      */
     public JButton getBtnCargarArchivo() {
         return btnCargarArchivo;
@@ -547,6 +703,33 @@ public class Aplicacion extends JFrame {
      */
     public DefaultTableModel getModeloDisco() {
         return modeloDisco;
+    }
+
+    /**
+     * Obtiene el modelo de trabajos pendientes.
+     *
+     * @return modelo de trabajos y estados.
+     */
+    public DefaultTableModel getModeloTrabajos() {
+        return modeloTrabajos;
+    }
+
+    /**
+     * Obtiene el modelo de procesos cargados en RAM.
+     *
+     * @return modelo de procesos y estados.
+     */
+    public DefaultTableModel getModeloProcesos() {
+        return modeloProcesos;
+    }
+
+    /**
+     * Obtiene el modelo de estadísticas.
+     *
+     * @return modelo de tiempos por proceso.
+     */
+    public DefaultTableModel getModeloEstadisticas() {
+        return modeloEstadisticas;
     }
 
     /**

@@ -2,556 +2,249 @@ package com.mycompany.t1operativos;
 
 import com.mycompany.t1operativos.gui.Aplicacion;
 import java.io.File;
-import java.io.IOException;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import javax.swing.JOptionPane;
 import javax.swing.Timer;
 import javax.swing.table.DefaultTableModel;
 
 /**
- * Conecta la interfaz gráfica con los componentes de la Mini PC.
- *
- * Se encarga de cargar programas, crear la memoria y su BCP, ejecutar la CPU y
- * mantener actualizadas las tablas y el panel de contexto del proceso.
+ * Conecta la vista con el gestor de procesos.
  *
  * @author deislher sánchez funez
  */
 public class Controlador {
-
     private Aplicacion vista;
-    private CargadorArchivos cargador;
+    private GestorProcesos gestor;
     private Parser parser;
-    private Memoria memoria;
-    private Disco disco;
-    private CPU cpu;
-    private BCP bcp;
-    private int posicionBCP;
     private Timer ejecucionAutomatica;
-    private String[] instruccionPendiente;
-    private int segundosPendientes;
     private boolean modoAutomatico;
-    private boolean esperandoTeclado;
-    private long inicioEsperaTeclado;
+    private Proceso solicitudTecladoVisible;
 
     /**
-     * Construye el controlador y registra los eventos de la interfaz.
+     * Construye el controlador y registra los eventos.
      *
-     * @param vista ventana principal que se desea controlar.
+     * @param vista ventana principal.
      */
     public Controlador(Aplicacion vista) {
         if (vista == null) {
             throw new IllegalArgumentException("La vista no puede ser nula.");
         }
         this.vista = vista;
-        this.cargador = new CargadorArchivos();
+        this.gestor = null;
         this.parser = new Parser();
-        this.posicionBCP = -1;
-        this.ejecucionAutomatica = new Timer(1000, e -> ejecutarPaso());
+        this.modoAutomatico = false;
+        this.solicitudTecladoVisible = null;
+        this.ejecucionAutomatica = new Timer(1000, e -> {
+            if (modoAutomatico) {
+                ejecutarPaso();
+            }
+        });
         registrarEventos();
     }
 
     /**
-     * Registra los eventos de la interfaz.
+     * Registra los eventos de la vista.
      */
     private void registrarEventos() {
-        vista.addPropertyChangeListener("Archivo cargado", evento -> {
-            Object archivoSeleccionado = evento.getNewValue();
-            if (archivoSeleccionado instanceof File) {
-                cargarPrograma((File) archivoSeleccionado);
+        vista.addPropertyChangeListener("Archivos cargados", evento -> {
+            if (!(evento.getNewValue() instanceof List<?> seleccion)) {
+                mostrarError("La selección debe contener una lista de archivos.");
+                return;
+            }
+            for (Object elemento : seleccion) {
+                if (elemento != null && !(elemento instanceof File)) {
+                    mostrarError("La selección contiene un elemento que no es un archivo.");
+                    return;
+                }
+            }
+            @SuppressWarnings("unchecked")
+            List<File> archivos = (List<File>) seleccion;
+            cargarProgramas(archivos);
+        });
+        vista.getBtnPasoAPaso().addActionListener(e -> {
+            if (!modoAutomatico) {
+                ejecutarPaso();
             }
         });
-        vista.getBtnPasoAPaso().addActionListener(e -> ejecutarPaso());
         vista.getBtnEjecutar().addActionListener(e -> ejecutarTodo());
         vista.getBtnLimpiar().addActionListener(e -> limpiar());
         vista.addPropertyChangeListener("Entrada de teclado", evento -> recibirEntradaTeclado());
     }
 
     /**
-     * Guarda un archivo en disco, lo copia a RAM y crea el contexto del proceso.
+     * Entrega los archivos al gestor.
      *
-     * @param archivo archivo ensamblador seleccionado.
+     * @param archivos selección de la vista.
      */
-    private void cargarPrograma(File archivo) {
-        if (modoAutomatico || esperandoTeclado) {
-            return;
-        }
+    private void cargarProgramas(List<File> archivos) {
+        GestorProcesos destino = gestor;
         try {
-            int tamañoTotal = vista.getMemoriaSeleccionada();
-            if (tamañoTotal < 128 || tamañoTotal % 4 != 0) {
-                throw new IllegalArgumentException("La memoria debe tener al menos 128 posiciones y ser múltiplo de 4 para dividirla en 25% y 75%.");
+            if (destino == null || destino.getProcesosRegistrados().isEmpty()) {
+                destino = new GestorProcesos(vista.getMemoriaSeleccionada(), vista.getDiscoSeleccionado());
             }
-            List<String[]> instrucciones = cargador.cargarArchivo(archivo.getAbsolutePath());
-            List<String> errores = cargador.getErrores();
-            if (!errores.isEmpty()) {
-                throw new IllegalArgumentException("No se cargó el archivo porque contiene errores:\n\n" + String.join("\n", errores));
+            int cantidadAnterior = destino.getProcesosRegistrados().size();
+            List<String> mensajes = destino.cargarProgramas(archivos);
+            if (destino.getProcesosRegistrados().size() > cantidadAnterior) {
+                gestor = destino;
+                actualizarVista();
             }
-            int tamañoKernel = tamañoTotal / 4;
-            int tamañoUsuario = tamañoTotal - tamañoKernel;
-            if (instrucciones.isEmpty() || instrucciones.size() > tamañoUsuario) {
-                throw new IllegalArgumentException("El programa debe contener instrucciones y caber en el espacio de usuario.");
+            if (!mensajes.isEmpty()) {
+                mostrarError(String.join("\n", mensajes));
             }
-            int tamañoDisco = vista.getDiscoSeleccionado();
-            int tamañoIndices = tamañoDisco / 20;
-            int tamañoMemoriaVirtual = tamañoDisco / 8;
-            Disco nuevoDisco = copiarDisco(tamañoDisco, tamañoIndices, tamañoMemoriaVirtual);
-            int posicionIndice = buscarEntradaLibre(nuevoDisco, archivo.getName());
-            int direccionDisco = buscarEspacioLibre(nuevoDisco, instrucciones.size());
-            nuevoDisco.escribirIndice(posicionIndice, archivo.getName(), direccionDisco, instrucciones.size());
-            for (int i = 0; i < instrucciones.size(); i++) {
-                nuevoDisco.escribirDatos(direccionDisco + i, instrucciones.get(i));
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            if (destino != null && !destino.getProcesosRegistrados().isEmpty()) {
+                gestor = destino;
             }
-            Memoria nuevaMemoria = new Memoria(tamañoTotal, tamañoKernel);
-            for (int i = 0; i < instrucciones.size(); i++) {
-                nuevaMemoria.escribirUsuario(tamañoKernel + i, nuevoDisco.leer(direccionDisco + i));
-            }
-            int finPrograma = tamañoKernel + instrucciones.size() - 1;
-            CPU nuevaCPU = new CPU();
-            nuevaCPU.setPc(tamañoKernel);
-            BCP nuevoBCP = new BCP(1, 1, tamañoKernel, finPrograma);
-            nuevoBCP.setEstadoListo();
-            nuevoBCP.guardarContexto(nuevaCPU);
-
-            disco = nuevoDisco;
-            memoria = nuevaMemoria;
-            cpu = nuevaCPU;
-            bcp = nuevoBCP;
-            posicionBCP = 0;
-            reiniciarEjecucion();
-            actualizarTablaDisco();
-            actualizarTablaMemoria();
-            actualizarBCP();
-            actualizarSeleccionProximaInstruccion();
-            vista.setSelectorMemoriaHabilitado(false);
-            vista.setSelectorDiscoHabilitado(false);
-            vista.setControlesProgramaHabilitados(true);
-            vista.setTitle("Mini PC - " + archivo.getName());
-            actualizarEstadoEjecucion();
-        } catch (IOException | IllegalArgumentException | IllegalStateException ex) {
+            ejecucionAutomatica.stop();
+            modoAutomatico = false;
+            actualizarVista();
+            vista.imprimirPantalla("Error de carga: " + ex.getMessage());
             mostrarError(ex.getMessage());
         }
     }
 
     /**
-     * Prepara una copia del disco sin alterar los archivos guardados.
-     *
-     * @param tamañoDisco cantidad de posiciones seleccionada en la vista.
-     * @param tamañoIndices cantidad de entradas calculada para el índice.
-     * @param tamañoMemoriaVirtual cantidad de posiciones calculada para el respaldo.
-     * @return el disco preparado para una nueva carga.
-     */
-    private Disco copiarDisco(int tamañoDisco, int tamañoIndices, int tamañoMemoriaVirtual) {
-        if (disco != null && disco.getTamañoTotal() != tamañoDisco) {
-            throw new IllegalStateException("Debe limpiar la simulación antes de cambiar el tamaño del disco.");
-        }
-        Disco nuevoDisco = new Disco(tamañoDisco, tamañoIndices, tamañoDisco - tamañoMemoriaVirtual);
-        if (disco != null) {
-            for (int posicion = 0; posicion < disco.getInicioDatos(); posicion++) {
-                String[] entrada = disco.leer(posicion);
-                if (entrada != null) {
-                    nuevoDisco.escribirIndice(posicion, entrada[0], Integer.parseInt(entrada[1]), Integer.parseInt(entrada[2]));
-                }
-            }
-            for (int posicion = disco.getInicioDatos(); posicion < disco.getInicioMemoriaVirtual(); posicion++) {
-                String[] contenido = disco.leer(posicion);
-                if (contenido != null) {
-                    nuevoDisco.escribirDatos(posicion, contenido);
-                }
-            }
-        }
-        return nuevoDisco;
-    }
-
-    /**
-     * Busca una entrada libre y rechaza nombres de archivo repetidos.
-     *
-     * @param discoDestino disco donde se guardará el archivo.
-     * @param nombre nombre del archivo seleccionado.
-     * @return la posición de la primera entrada libre.
-     */
-    private int buscarEntradaLibre(Disco discoDestino, String nombre) {
-        int posicionLibre = -1;
-        for (int posicion = 0; posicion < discoDestino.getInicioDatos(); posicion++) {
-            String[] entrada = discoDestino.leer(posicion);
-            if (entrada == null) {
-                if (posicionLibre < 0) {
-                    posicionLibre = posicion;
-                }
-            } else if (entrada[0].equalsIgnoreCase(nombre)) {
-                throw new IllegalArgumentException("El archivo " + nombre + " ya existe en el índice del disco.");
-            }
-        }
-        if (posicionLibre < 0) {
-            throw new IllegalStateException("El índice del disco no tiene entradas disponibles.");
-        }
-        return posicionLibre;
-    }
-
-    /**
-     * Busca un bloque libre suficiente en la zona de datos.
-     *
-     * @param discoDestino disco donde se guardará el contenido.
-     * @param cantidad cantidad de instrucciones del archivo.
-     * @return la dirección inicial del primer bloque disponible.
-     */
-    private int buscarEspacioLibre(Disco discoDestino, int cantidad) {
-        int posicionesLibres = 0;
-        for (int posicion = discoDestino.getInicioDatos(); posicion < discoDestino.getInicioMemoriaVirtual(); posicion++) {
-            if (discoDestino.leer(posicion) == null) {
-                posicionesLibres++;
-                if (posicionesLibres == cantidad) {
-                    return posicion - cantidad + 1;
-                }
-            } else {
-                posicionesLibres = 0;
-            }
-        }
-        throw new IllegalStateException("El disco no tiene un bloque de datos libre para las " + cantidad + " instrucciones del archivo.");
-    }
-
-    /**
-     * Avanza un segundo de CPU y completa la instrucción al alcanzar su peso.
+     * Solicita un paso y muestra su resultado.
      */
     private void ejecutarPaso() {
-        if (cpu == null || bcp == null) {
-            mostrarError("Primero debe cargar un programa.");
+        if (gestor == null) {
+            mostrarError("Primero debe cargar programas.");
             return;
         }
-        if (esperandoTeclado || "TERMINADO".equals(bcp.getEstado())) {
+        if (!gestor.puedeEjecutar()) {
+            actualizarVista();
             return;
         }
         try {
-            if (!hayInstruccionPendiente()) {
-                finalizarProceso();
-                actualizarContextoVista();
-                return;
+            String salida = gestor.ejecutarPaso();
+            if (salida != null) {
+                vista.imprimirPantalla(salida);
             }
-            bcp.setEstadoEjecutando();
-            bcp.setCpuActual(1);
-            if (instruccionPendiente == null) {
-                instruccionPendiente = memoria.leer(cpu.getPc());
-                if (instruccionPendiente == null) {
-                    throw new IllegalStateException("No existe una instrucción en la posición " + cpu.getPc() + ".");
-                }
-                cpu.cargarInstruccion(instruccionPendiente);
-                if ("INT".equals(instruccionPendiente[0]) && "09H".equals(instruccionPendiente[1])) {
-                    ejecutarSiguiente();
-                    actualizarContextoVista();
-                    return;
-                }
-                segundosPendientes = obtenerPeso(instruccionPendiente);
-            }
-
-            bcp.aumentarTiempoEmpleado();
-            segundosPendientes--;
-            if (segundosPendientes == 0) {
-                ejecutarSiguiente();
-                instruccionPendiente = null;
-                if ("TERMINADO".equals(bcp.getEstado()) || !hayInstruccionPendiente()) {
-                    finalizarProceso();
-                }
-            }
-            actualizarContextoVista();
+            actualizarVista();
         } catch (IllegalArgumentException | IllegalStateException ex) {
-            finalizarProceso();
-            actualizarContextoVista();
-            vista.mostrarEstadoEjecucion("Ejecución finalizada con error.");
+            ejecucionAutomatica.stop();
+            modoAutomatico = false;
+            actualizarVista();
+            vista.mostrarEstadoEjecucion("Ejecución detenida con error.");
             vista.imprimirPantalla("Error: " + ex.getMessage());
             mostrarError(ex.getMessage());
         }
     }
 
     /**
-     * Inicia la ejecución automática del programa.
+     * Inicia el modo automático.
      */
     private void ejecutarTodo() {
-        if (cpu == null || bcp == null) {
-            mostrarError("Primero debe cargar un programa.");
+        if (gestor == null) {
+            mostrarError("Primero debe cargar programas.");
             return;
         }
-        if (esperandoTeclado || "TERMINADO".equals(bcp.getEstado())) {
+        if (!gestor.puedeEjecutar()) {
+            actualizarVista();
             return;
         }
         modoAutomatico = true;
-        bcp.setEstadoEjecutando();
-        bcp.setCpuActual(1);
-        deshabilitarControlesDuranteEjecucion();
-        actualizarContextoVista();
-        ejecucionAutomatica.start();
+        actualizarControles();
     }
 
     /**
-     * Deshabilita los controles durante la ejecución.
-     */
-    private void deshabilitarControlesDuranteEjecucion() {
-        vista.getBtnEjecutar().setEnabled(false);
-        vista.getBtnPasoAPaso().setEnabled(false);
-        vista.getBtnCargarArchivo().setEnabled(false);
-        vista.getBtnLimpiar().setEnabled(false);
-    }
-
-    /**
-     * Obtiene el peso fijo de una instrucción.
-     *
-     * @param instruccion arreglo con el operador y sus operandos.
-     * @return el peso fijo de la instrucción en segundos.
-     */
-    private int obtenerPeso(String[] instruccion) {
-        switch (instruccion[0]) {
-            case "MOV":
-            case "INC":
-            case "DEC":
-            case "SWAP":
-            case "PUSH":
-            case "POP":
-                return 1;
-            case "LOAD":
-            case "STORE":
-            case "CMP":
-            case "JMP":
-            case "JE":
-            case "JNE":
-                return 2;
-            case "ADD":
-            case "SUB":
-            case "PARAM":
-                return 3;
-            case "INT":
-                if ("10H".equals(instruccion[1]) || "20H".equals(instruccion[1])) {
-                    return 2;
-                }
-                if ("21H".equals(instruccion[1])) {
-                    return 5;
-                }
-                throw new IllegalStateException("INT 09H no tiene un peso fijo; depende de la entrada del usuario.");
-            default:
-                throw new IllegalArgumentException("No se conoce el peso de " + instruccion[0] + ".");
-        }
-    }
-
-    /**
-     * Ejecuta la instrucción ubicada en el PC actual.
-     *
-     * @return {@code true} si la instrucción se completó; {@code false} si no se ejecutó o espera una entrada.
-     */
-    private boolean ejecutarSiguiente() {
-        if (esperandoTeclado || "TERMINADO".equals(bcp.getEstado()) || !hayInstruccionPendiente()) {
-            return false;
-        }
-        String[] instruccion = memoria.leer(cpu.getPc());
-        if (instruccion == null) {
-            throw new IllegalStateException("No existe una instrucción en la posición " + cpu.getPc() + ".");
-        }
-        cpu.cargarInstruccion(instruccion);
-        int siguientePc = cpu.getPc() + 1;
-        switch (instruccion[0]) {
-            case "JMP":
-                siguientePc = calcularDestinoSalto(Integer.parseInt(instruccion[1]));
-                break;
-            case "JE":
-                if (cpu.esIgual()) {
-                    siguientePc = calcularDestinoSalto(Integer.parseInt(instruccion[1]));
-                }
-                break;
-            case "JNE":
-                if (!cpu.esIgual()) {
-                    siguientePc = calcularDestinoSalto(Integer.parseInt(instruccion[1]));
-                }
-                break;
-            case "PARAM":
-                int cantidad = instruccion.length - 1;
-                if (bcp.getCantidadEnPila() + cantidad > bcp.getCapacidadPila()) {
-                    throw new IllegalStateException("Desbordamiento de pila: no hay espacio para los " + cantidad + " parámetros. Capacidad máxima de 5 valores.");
-                }
-                for (int i = 1; i < instruccion.length; i++) {
-                    bcp.apilar(Integer.parseInt(instruccion[i]));
-                }
-                break;
-            case "PUSH":
-                bcp.apilar(cpu.leerRegistro(instruccion[1]));
-                break;
-            case "POP":
-                cpu.escribirRegistro(instruccion[1], bcp.desapilar());
-                break;
-            case "INT":
-                switch (instruccion[1]) {
-                    case "20H":
-                        bcp.setEstadoTerminado();
-                        break;
-                    case "10H":
-                        vista.imprimirPantalla(cpu.getDx());
-                        break;
-                    case "09H":
-                        solicitarEntradaTeclado();
-                        return false;
-                    default:
-                        throw new IllegalArgumentException("La interrupción INT " + instruccion[1]
-                                + " todavía no está implementada.");
-                }
-                break;
-            default:
-                cpu.ejecutarInstruccion(instruccion);
-                break;
-        }
-        cpu.setPc(siguientePc);
-        return true;
-    }
-
-    /**
-     * Solicita una entrada de teclado y bloquea el proceso.
-     */
-    private void solicitarEntradaTeclado() {
-        ejecucionAutomatica.stop();
-        esperandoTeclado = true;
-        inicioEsperaTeclado = System.nanoTime();
-        bcp.setEstadoBloqueado();
-        deshabilitarControlesDuranteEjecucion();
-        vista.imprimirPantalla(">> Ingresar valor: ");
-        vista.setEntradaTecladoHabilitada(true);
-    }
-
-    /**
-     * Valida la entrada de teclado y completa la interrupción INT 09H.
+     * Entrega la entrada activa al gestor.
      */
     private void recibirEntradaTeclado() {
-        if (!esperandoTeclado) {
+        if (gestor == null || solicitudTecladoVisible == null) {
             return;
         }
-        String texto = vista.getTextoEntradaTeclado().trim();
-        int valor;
+        if (gestor.getSolicitudTeclado() != solicitudTecladoVisible) {
+            vista.imprimirPantalla("Error de teclado: el aviso no corresponde al solicitante actual.");
+            actualizarSolicitudTeclado();
+            return;
+        }
         try {
-            valor = Integer.parseInt(texto);
-        } catch (NumberFormatException ex) {
-            vista.imprimirPantalla("Entrada inválida: se requiere un entero de 0 a 255.");
+            gestor.recibirEntradaTeclado(vista.getTextoEntradaTeclado());
+            vista.setEntradaTecladoHabilitada(false);
+            solicitudTecladoVisible = null;
+            actualizarVista();
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            vista.imprimirPantalla(ex.getMessage());
             vista.seleccionarEntradaTeclado();
-            return;
-        }
-        if (valor < 0 || valor > 255) {
-            vista.imprimirPantalla("Entrada fuera de rango: el valor debe estar entre 0 y 255.");
-            vista.seleccionarEntradaTeclado();
-            return;
-        }
-
-        registrarEsperaTeclado();
-        cpu.setDx(Integer.toString(valor));
-        cpu.avanzarPc();
-        instruccionPendiente = null;
-        segundosPendientes = 0;
-        vista.setEntradaTecladoHabilitada(false);
-        if (!hayInstruccionPendiente()) {
-            finalizarProceso();
-        } else {
-            bcp.setEstadoListo();
-            if (modoAutomatico) {
-                ejecucionAutomatica.restart();
-            } else {
-                vista.setControlesProgramaHabilitados(true);
-                vista.getBtnCargarArchivo().setEnabled(true);
-            }
-        }
-        actualizarContextoVista();
-    }
-
-    /**
-     * Suma la espera de teclado al tiempo del proceso.
-     */
-    private void registrarEsperaTeclado() {
-        if (esperandoTeclado) {
-            long segundos = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - inicioEsperaTeclado);
-            bcp.aumentarTiempoEmpleado(segundos);
-            esperandoTeclado = false;
-            inicioEsperaTeclado = 0;
         }
     }
 
     /**
-     * Finaliza el proceso y detiene la ejecución.
+     * Limpia el dominio y la presentación.
      */
-    private void finalizarProceso() {
-        registrarEsperaTeclado();
-        bcp.setEstadoTerminado();
-        instruccionPendiente = null;
-        segundosPendientes = 0;
-        deshabilitarEjecucion();
-    }
-
-    /**
-     * Guarda el contexto actual y actualiza la vista.
-     */
-    private void actualizarContextoVista() {
-        bcp.guardarContexto(cpu);
-        actualizarBCP();
-        actualizarTablaMemoria();
-        actualizarSeleccionProximaInstruccion();
-        actualizarEstadoEjecucion();
-    }
-
-    /**
-     * Actualiza el estado de ejecución mostrado en la vista.
-     */
-    private void actualizarEstadoEjecucion() {
-        if (bcp == null) {
-            vista.mostrarEstadoEjecucion("Sin programa cargado.");
-        } else if (esperandoTeclado) {
-            vista.mostrarEstadoEjecucion("INT 09H: esperando una entrada del teclado.");
-        } else if (instruccionPendiente != null) {
-            vista.mostrarEstadoEjecucion("Ejecutando: " + parser.traducirInstruccion(instruccionPendiente));
-        } else {
-            vista.mostrarEstadoEjecucion("Proceso " + bcp.getEstado());
-        }
-    }
-
-    /**
-     * Restablece el modo de ejecución y limpia la consola.
-     */
-    private void reiniciarEjecucion() {
+    private void limpiar() {
         ejecucionAutomatica.stop();
         modoAutomatico = false;
-        esperandoTeclado = false;
-        inicioEsperaTeclado = 0;
-        instruccionPendiente = null;
-        segundosPendientes = 0;
-        vista.limpiarConsola();
-        actualizarEstadoEjecucion();
-    }
-
-    /**
-     * Calcula el destino de un salto dentro de los límites del proceso.
-     *
-     * @param desplazamiento desplazamiento relativo al PC actual.
-     * @return la dirección de destino del salto.
-     */
-    private int calcularDestinoSalto(int desplazamiento) {
-        long destino = (long) cpu.getPc() + desplazamiento;
-        if (destino < bcp.getInicioMemoria() || destino > bcp.getFinMemoria()) {
-            throw new IllegalStateException("Salto fuera de los límites del programa: dirección " + destino + ". Rango permitido: " + bcp.getInicioMemoria() + " a " + bcp.getFinMemoria() + ".");
+        if (gestor != null) {
+            gestor.limpiar();
         }
-        return (int) destino;
+        solicitudTecladoVisible = null;
+        vista.limpiarConsola();
+        vista.setTitle("Mini PC");
+        actualizarVista();
     }
 
     /**
-     * Comprueba si el PC se encuentra dentro del programa cargado.
-     *
-     * @return {@code true} si el PC está dentro de los límites del programa.
+     * Actualiza los datos de la vista.
      */
-    private boolean hayInstruccionPendiente() {
-        return cpu.getPc() >= bcp.getInicioMemoria() && cpu.getPc() <= bcp.getFinMemoria();
+    private void actualizarVista() {
+        actualizarTablaMemoria();
+        actualizarTablaDisco();
+        actualizarTablaTrabajos();
+        actualizarTablaProcesos();
+        actualizarEstadisticas();
+        actualizarBCP();
+        actualizarSeleccionProximaInstruccion();
+        actualizarEstadoEjecucion();
+        actualizarSolicitudTeclado();
+        actualizarControles();
     }
 
     /**
-     * Muestra el índice, los archivos y la zona reservada del disco.
+     * Muestra el contenido de RAM.
+     */
+    private void actualizarTablaMemoria() {
+        DefaultTableModel modelo = vista.getModeloMemoria();
+        modelo.setRowCount(0);
+        if (gestor == null || gestor.getProcesosRegistrados().isEmpty()) {
+            return;
+        }
+        Memoria memoria = gestor.getMemoria();
+        for (int posicion = 0; posicion < memoria.getTamañoTotal(); posicion++) {
+            String contenido = "";
+            String[] valor = memoria.leer(posicion);
+            if (valor != null) {
+                if (memoria.esDireccionKernel(posicion)) {
+                    contenido = valor[0] + ": " + valor[1];
+                } else {
+                    contenido = parser.traducirInstruccion(valor);
+                }
+            }
+            modelo.addRow(new Object[]{posicion, contenido});
+        }
+    }
+
+    /**
+     * Muestra el contenido del disco.
      */
     private void actualizarTablaDisco() {
         DefaultTableModel modelo = vista.getModeloDisco();
         modelo.setRowCount(0);
-        if (disco == null) {
+        if (gestor == null || gestor.getProcesosRegistrados().isEmpty()) {
             return;
         }
+        Disco disco = gestor.getDisco();
         for (int posicion = 0; posicion < disco.getTamañoTotal(); posicion++) {
             String contenido = "";
             String[] valor = disco.leer(posicion);
             if (disco.esDireccionIndice(posicion)) {
-                contenido = valor == null ? "Índice (libre)" : "[" + valor[0] + ", " + valor[1] + ", " + valor[2] + "]";
+                if (valor == null) {
+                    contenido = "Índice (libre)";
+                } else {
+                    contenido = "[" + valor[0] + ", " + valor[1] + ", " + valor[2] + "]";
+                }
             } else if (disco.esDireccionMemoriaVirtual(posicion)) {
                 contenido = "Memoria virtual (sin uso)";
             } else if (valor != null) {
@@ -562,92 +255,84 @@ public class Controlador {
     }
 
     /**
-     * Escribe los atributos del BCP en el kernel.
+     * Muestra los trabajos pendientes de RAM.
      */
-    private void escribirBCPEnMemoria() {
-        String[] nombres = {
-            "idProceso",
-            "estado",
-            "prioridad",
-            "pc",
-            "inicioMemoria",
-            "finMemoria",
-            "ir",
-            "ac",
-            "ax",
-            "bx",
-            "cx",
-            "dx",
-            "flag",
-            "pila1",
-            "pila2",
-            "pila3",
-            "pila4",
-            "pila5",
-            "punteroPila",
-            "cpuActual",
-            "tiempoInicio",
-            "tiempoFinal",
-            "tiempoTotalSegundos",
-            "direccionSiguienteBCP"
-        };
-        String[] valores = {String.valueOf(bcp.getIdProceso()), bcp.getEstado(),
-            String.valueOf(bcp.getPrioridad()), String.valueOf(bcp.getPc()),
-            String.valueOf(bcp.getInicioMemoria()), String.valueOf(bcp.getFinMemoria()),
-            bcp.getIrToString(), String.valueOf(bcp.getAc()), String.valueOf(bcp.getAx()),
-            String.valueOf(bcp.getBx()), String.valueOf(bcp.getCx()), bcp.getDx(),
-            String.valueOf(bcp.esIgual()), String.valueOf(bcp.getValorPila(0)),
-            String.valueOf(bcp.getValorPila(1)), String.valueOf(bcp.getValorPila(2)),
-            String.valueOf(bcp.getValorPila(3)), String.valueOf(bcp.getValorPila(4)),
-            String.valueOf(bcp.getPunteroPila()), String.valueOf(bcp.getCpuActual()),
-            String.valueOf(bcp.getTiempoInicio()), String.valueOf(bcp.getTiempoFinal()),
-            String.valueOf(bcp.getTiempoTotalSegundos()), String.valueOf(bcp.getDireccionSiguienteBCP())
-        };
-        for (int i = 0; i < nombres.length; i++) {
-            memoria.escribirKernel(posicionBCP + i, nombres[i], valores[i]);
-        }
-    }
-
-    /**
-     * Actualiza la tabla con el contenido de la memoria.
-     */
-    private void actualizarTablaMemoria() {
-        DefaultTableModel modelo = vista.getModeloMemoria();
+    private void actualizarTablaTrabajos() {
+        DefaultTableModel modelo = vista.getModeloTrabajos();
         modelo.setRowCount(0);
-        if (memoria == null) {
-            return;
-        }
-        escribirBCPEnMemoria();
-        for (int posicion = 0; posicion < memoria.getTamañoTotal(); posicion++) {
-            String contenido = "";
-            if (memoria.esDireccionKernel(posicion)) {
-                String[] atributo = memoria.leer(posicion);
-                if (atributo != null) {
-                    contenido = atributo[0] + ": " + atributo[1];
-                }
-            } else {
-                String[] instruccion = memoria.leer(posicion);
-                if (instruccion != null) {
-                    contenido = parser.traducirInstruccion(instruccion);
+        if (gestor != null) {
+            for (Proceso proceso : gestor.getProcesosRegistrados()) {
+                BCP bcp = proceso.getBCP();
+                if ("NUEVO".equals(bcp.getEstado())) {
+                    modelo.addRow(new Object[]{bcp.getIdProceso(), bcp.getEstado()});
                 }
             }
-            modelo.addRow(new Object[] { posicion, contenido });
         }
     }
 
     /**
-     * Actualiza la información del BCP en la vista.
+     * Muestra los procesos cargados en RAM.
+     */
+    private void actualizarTablaProcesos() {
+        DefaultTableModel modelo = vista.getModeloProcesos();
+        modelo.setRowCount(0);
+        if (gestor != null) {
+            for (Proceso proceso : gestor.getProcesosRegistrados()) {
+                if (proceso.getPosicionBCP() >= 0) {
+                    modelo.addRow(new Object[]{proceso.getBCP().getIdProceso(), proceso.getBCP().getEstado()});
+                }
+            }
+        }
+    }
+
+    /**
+     * Muestra los tiempos de todos los procesos registrados.
+     */
+    private void actualizarEstadisticas() {
+        DefaultTableModel modelo = vista.getModeloEstadisticas();
+        modelo.setRowCount(0);
+        if (gestor != null) {
+            DateTimeFormatter formato = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+            for (Proceso proceso : gestor.getProcesosRegistrados()) {
+                BCP bcp = proceso.getBCP();
+                String inicio = "-";
+                String fin = "-";
+                if (bcp.getTiempoInicio() != null) {
+                    inicio = bcp.getTiempoInicio().format(formato);
+                }
+                if (bcp.getTiempoFinal() != null) {
+                    fin = bcp.getTiempoFinal().format(formato);
+                }
+                modelo.addRow(new Object[]{bcp.getIdProceso(), inicio, fin, bcp.getTiempoTotalSegundos()});
+            }
+        }
+    }
+
+    /**
+     * Muestra únicamente el BCP con CPU.
      */
     private void actualizarBCP() {
-        if (bcp == null) {
+        Proceso proceso = null;
+        if (gestor != null) {
+            proceso = gestor.getActual();
+        }
+        if (proceso == null) {
             vista.mostrarBCP("");
             return;
         }
-
+        BCP bcp = proceso.getBCP();
+        String inicio = "-";
+        String fin = "-";
+        if (bcp.getTiempoInicio() != null) {
+            inicio = bcp.getTiempoInicio().toString();
+        }
+        if (bcp.getTiempoFinal() != null) {
+            fin = bcp.getTiempoFinal().toString();
+        }
         String texto = "ID: " + bcp.getIdProceso()
                 + "\nEstado: " + bcp.getEstado()
                 + "\nPrioridad: " + bcp.getPrioridad()
-                + "\nPosición BCP: " + posicionBCP
+                + "\nPosición BCP: " + proceso.getPosicionBCP()
                 + "\nInicio memoria: " + bcp.getInicioMemoria()
                 + "\nFin memoria: " + bcp.getFinMemoria()
                 + "\nPC: " + bcp.getPc()
@@ -665,66 +350,109 @@ public class Controlador {
                 + "\nPila 5: " + bcp.getValorPila(4)
                 + "\nPuntero pila: " + bcp.getPunteroPila()
                 + "\nCPU actual: " + bcp.getCpuActual()
-                + "\nInicio ejecución: " + (bcp.getTiempoInicio() == null ? "-" : bcp.getTiempoInicio().toString())
-                + "\nFin ejecución: " + (bcp.getTiempoFinal() == null ? "-" : bcp.getTiempoFinal().toString())
-                + "\nDuración: " + bcp.getTiempoTotalSegundos() + " s";
+                + "\nInicio ejecución: " + inicio
+                + "\nFin ejecución: " + fin
+                + "\nDuración: " + bcp.getTiempoTotalSegundos() + " s"
+                + "\nSiguiente BCP: " + bcp.getDireccionSiguienteBCP();
         vista.mostrarBCP(texto);
     }
 
     /**
-     * Resalta en RAM la instrucción señalada actualmente por el PC.
+     * Resalta el PC del proceso actual.
      */
     private void actualizarSeleccionProximaInstruccion() {
-        if (cpu == null || memoria == null || bcp == null || "TERMINADO".equals(bcp.getEstado()) || !hayInstruccionPendiente()) {
+        Proceso actual = null;
+        if (gestor != null) {
+            actual = gestor.getActual();
+        }
+        if (actual == null) {
             vista.limpiarSeleccionTablas();
+        } else {
+            vista.seleccionarProximaInstruccion(gestor.getCPU().getPc());
+        }
+    }
+
+    /**
+     * Muestra el estado de ejecución.
+     */
+    private void actualizarEstadoEjecucion() {
+        if (gestor == null || gestor.getProcesosRegistrados().isEmpty()) {
+            vista.mostrarEstadoEjecucion("Sin programas cargados.");
             return;
         }
-        int posicionMemoria = cpu.getPc();
-        vista.seleccionarProximaInstruccion(posicionMemoria);
+        Proceso actual = gestor.getActual();
+        Proceso solicitud = gestor.getSolicitudTeclado();
+        String estado;
+        if (actual != null) {
+            estado = "Proceso " + actual.getBCP().getIdProceso() + " ejecutando";
+            String[] instruccion = gestor.getInstruccionPendiente();
+            if (instruccion != null) {
+                estado += ": " + parser.traducirInstruccion(instruccion);
+            }
+        } else if (gestor.puedeEjecutar()) {
+            estado = "CPU libre: hay procesos listos.";
+        } else if (gestor.hayProcesosSinTerminar()) {
+            estado = "Esperando teclado o admisión en memoria.";
+        } else {
+            estado = "Todos los procesos terminaron.";
+        }
+        if (solicitud != null) {
+            estado += " | Proceso " + solicitud.getBCP().getIdProceso() + ": INT 09H, esperando teclado.";
+        }
+        vista.mostrarEstadoEjecucion(estado);
     }
 
     /**
-     * Vacía la simulación y conserva los tamaños seleccionados.
+     * Abre el aviso del solicitante pendiente.
      */
-    private void limpiar() {
-        memoria = null;
-        disco = null;
-        cpu = null;
-        bcp = null;
-        posicionBCP = -1;
-        vista.getModeloDisco().setRowCount(0);
-        vista.getModeloMemoria().setRowCount(0);
-        vista.limpiarSeleccionTablas();
-        vista.mostrarBCP("");
-        vista.setControlesProgramaHabilitados(false);
-        vista.setSelectorMemoriaHabilitado(true);
-        vista.setSelectorDiscoHabilitado(true);
-        vista.setTitle("Mini PC");
-        vista.getBtnCargarArchivo().setEnabled(true);
-        reiniciarEjecucion();
+    private void actualizarSolicitudTeclado() {
+        Proceso solicitud = null;
+        if (gestor != null) {
+            solicitud = gestor.getSolicitudTeclado();
+        }
+        if (solicitud == solicitudTecladoVisible) {
+            return;
+        }
+        if (solicitudTecladoVisible != null) {
+            vista.setEntradaTecladoHabilitada(false);
+        }
+        solicitudTecladoVisible = null;
+        if (solicitud != null) {
+            vista.mostrarSolicitudTeclado(solicitud.getBCP().getIdProceso());
+            solicitudTecladoVisible = solicitud;
+        }
     }
 
     /**
-     * Detiene la ejecución y deshabilita sus controles.
+     * Ajusta los controles y la actividad del Timer.
      */
-    private void deshabilitarEjecucion() {
-        ejecucionAutomatica.stop();
-        modoAutomatico = false;
-        esperandoTeclado = false;
-        vista.setEntradaTecladoHabilitada(false);
+    private void actualizarControles() {
+        boolean hayProcesosRegistrados = gestor != null && !gestor.getProcesosRegistrados().isEmpty();
+        boolean ejecutable = hayProcesosRegistrados && gestor.puedeEjecutar();
+        if (!hayProcesosRegistrados || !gestor.hayProcesosSinTerminar()) {
+            modoAutomatico = false;
+        }
+        if (modoAutomatico && ejecutable) {
+            if (!ejecucionAutomatica.isRunning()) {
+                ejecucionAutomatica.start();
+            }
+        } else {
+            ejecucionAutomatica.stop();
+        }
+        vista.getBtnEjecutar().setEnabled(ejecutable && !modoAutomatico);
+        vista.getBtnPasoAPaso().setEnabled(ejecutable && !modoAutomatico);
         vista.getBtnCargarArchivo().setEnabled(true);
-        vista.getBtnEjecutar().setEnabled(false);
-        vista.getBtnPasoAPaso().setEnabled(false);
-        vista.getBtnLimpiar().setEnabled(true);
+        vista.getBtnLimpiar().setEnabled(hayProcesosRegistrados && (!modoAutomatico || !ejecutable));
+        vista.setSelectorMemoriaHabilitado(!hayProcesosRegistrados);
+        vista.setSelectorDiscoHabilitado(!hayProcesosRegistrados);
     }
 
     /**
-     * Muestra un mensaje de error en la interfaz.
+     * Muestra un mensaje de error.
      *
-     * @param mensaje descripción del error que se desea mostrar.
+     * @param mensaje descripción del error.
      */
     private void mostrarError(String mensaje) {
         JOptionPane.showMessageDialog(vista, mensaje, "Error", JOptionPane.ERROR_MESSAGE);
     }
-
 }

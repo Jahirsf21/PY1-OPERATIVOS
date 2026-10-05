@@ -4,7 +4,7 @@ package com.mycompany.t1operativos;
  * Representa la CPU de la Mini PC.
  *
  * Mantiene los registros y ejecuta la instrucción que recibe. La lectura de
- * instrucciones desde memoria corresponde al controlador.
+ * instrucciones desde memoria corresponde al gestor de procesos.
  *
  * @author deislher sánchez funez
  */
@@ -26,6 +26,29 @@ public class CPU {
     }
 
     /**
+     * Carga los registros del contexto.
+     *
+     * @param pc contador de programa.
+     * @param ir instrucción guardada, o null.
+     * @param ac acumulador.
+     * @param ax registro AX.
+     * @param bx registro BX.
+     * @param cx registro CX.
+     * @param dx registro DX.
+     * @param flag resultado de la comparación.
+     */
+    public void cargarContexto(int pc, String[] ir, int ac, int ax, int bx, int cx, String dx, boolean flag) {
+        this.pc = pc;
+        this.ir = ir;
+        this.ac = ac;
+        this.ax = ax;
+        this.bx = bx;
+        this.cx = cx;
+        this.dx = dx;
+        this.flag = flag;
+    }
+
+    /**
      * Carga en el IR la instrucción que se va a ejecutar.
      *
      * @param instruccion arreglo con el operador y sus operandos.
@@ -34,7 +57,7 @@ public class CPU {
         if (instruccion == null || instruccion.length == 0) {
             throw new IllegalArgumentException("La instrucción no puede ser nula ni vacía.");
         }
-        ir = instruccion.clone();
+        ir = instruccion;
     }
 
     /**
@@ -52,7 +75,12 @@ public class CPU {
                 if ("DX".equals(registro) && "DX".equals(origen)) {
                     break;
                 }
-                int valor = esRegistro(origen) ? leerRegistro(origen) : Integer.parseInt(origen);
+                int valor;
+                if (esRegistro(origen)) {
+                    valor = leerRegistro(origen);
+                } else {
+                    valor = Integer.parseInt(origen);
+                }
                 escribirRegistro(registro, valor);
                 break;
             case "LOAD":
@@ -198,15 +226,12 @@ public class CPU {
     }
 
     /**
-     * Obtiene una copia de la instrucción actual.
+     * Obtiene la instrucción actual.
      *
-     * @return una copia del IR, o {@code null} si no hay una instrucción.
+     * @return el IR, o {@code null} si no hay una instrucción.
      */
     public String[] getIr() {
-        if (ir == null) {
-            return null;
-        }
-        return ir.clone();
+        return ir;
     }
 
     /**

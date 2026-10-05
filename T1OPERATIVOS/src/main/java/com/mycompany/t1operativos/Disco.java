@@ -21,7 +21,7 @@ public class Disco {
         if (tamañoTotal < 256) {
             throw new IllegalArgumentException("El disco debe tener al menos 256 posiciones.");
         }
-        if (inicioDatos <= 0 || inicioDatos >= inicioMemoriaVirtual || inicioMemoriaVirtual > tamañoTotal) {
+        if (inicioDatos <= 0 || inicioDatos >= inicioMemoriaVirtual) {
             throw new IllegalArgumentException("La distribución del disco debe separar índice, datos y memoria virtual.");
         }
         if (tamañoTotal - inicioMemoriaVirtual != tamañoTotal / 8) {
@@ -36,11 +36,11 @@ public class Disco {
      * Lee el contenido de una posición del disco.
      *
      * @param posicion dirección que se desea leer.
-     * @return una copia del contenido, o {@code null} si la posición está vacía.
+     * @return el contenido, o {@code null} si la posición está vacía.
      */
     public String[] leer(int posicion) {
         validarDireccion(posicion);
-        return disco[posicion] == null ? null : disco[posicion].clone();
+        return disco[posicion];
     }
 
     /**
@@ -62,8 +62,7 @@ public class Disco {
         if (tamaño <= 0) {
             throw new IllegalArgumentException("El tamaño del archivo debe ser positivo.");
         }
-        long finArchivo = (long) direccion + tamaño;
-        if (direccion < inicioDatos || finArchivo > inicioMemoriaVirtual) {
+        if (direccion < inicioDatos || tamaño > inicioMemoriaVirtual - direccion) {
             throw new IllegalArgumentException("El archivo debe almacenarse completo en la zona de datos del disco.");
         }
         disco[posicion] = new String[]{nombre, String.valueOf(direccion), String.valueOf(tamaño)};
@@ -80,7 +79,7 @@ public class Disco {
         if (posicion < inicioDatos || posicion >= inicioMemoriaVirtual) {
             throw new IllegalArgumentException("La posición no pertenece a la zona de datos del disco.");
         }
-        disco[posicion] = contenido == null ? null : contenido.clone();
+        disco[posicion] = contenido;
     }
 
     /**

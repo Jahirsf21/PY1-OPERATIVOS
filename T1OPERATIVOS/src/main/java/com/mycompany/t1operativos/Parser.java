@@ -384,22 +384,42 @@ public class Parser {
             case "SWAP":
             case "CMP":
                 error = validarInstruccionDosRegistros(partes);
-                return error == null ? new ResultadoParser(true, procesarInstruccionAsignacion(partes), null) : new ResultadoParser(false, null, error);
+                if (error == null) {
+                    return new ResultadoParser(true, procesarInstruccionAsignacion(partes), null);
+                } else {
+                    return new ResultadoParser(false, null, error);
+                }
             case "INT":
                 error = validarInstruccionInterrupcion(partes);
-                return error == null ? new ResultadoParser(true, procesarInstruccionSimple(partes), null) : new ResultadoParser(false, null, error);
+                if (error == null) {
+                    return new ResultadoParser(true, procesarInstruccionSimple(partes), null);
+                } else {
+                    return new ResultadoParser(false, null, error);
+                }
             case "JMP":
             case "JE":
             case "JNE":
                 error = validarInstruccionSalto(partes);
-                return error == null ? new ResultadoParser(true, procesarInstruccionSimple(partes), null) : new ResultadoParser(false, null, error);
+                if (error == null) {
+                    return new ResultadoParser(true, procesarInstruccionSimple(partes), null);
+                } else {
+                    return new ResultadoParser(false, null, error);
+                }
             case "PARAM":
                 error = validarInstruccionParametros(partes);
-                return error == null ? new ResultadoParser(true, procesarInstruccionParametros(partes), null) : new ResultadoParser(false, null, error);
+                if (error == null) {
+                    return new ResultadoParser(true, procesarInstruccionParametros(partes), null);
+                } else {
+                    return new ResultadoParser(false, null, error);
+                }
             case "PUSH":
             case "POP":
                 error = validarInstruccionPila(partes);
-                return error == null ? new ResultadoParser(true, procesarInstruccionSimple(partes), null) : new ResultadoParser(false, null, error);
+                if (error == null) {
+                    return new ResultadoParser(true, procesarInstruccionSimple(partes), null);
+                } else {
+                    return new ResultadoParser(false, null, error);
+                }
             default:
                 break;
         }

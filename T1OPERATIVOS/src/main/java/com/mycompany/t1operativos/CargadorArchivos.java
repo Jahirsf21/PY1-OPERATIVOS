@@ -68,10 +68,10 @@ public class CargadorArchivos {
     /**
      * Obtiene los errores encontrados durante la última carga del archivo.
      *
-     * @return una copia de la lista de errores, con su correspondiente número
+     * @return la lista de errores, con su correspondiente número
      *     de línea.
      */
     public List<String> getErrores() {
-        return new ArrayList<>(errores);
+        return errores;
     }
 }
