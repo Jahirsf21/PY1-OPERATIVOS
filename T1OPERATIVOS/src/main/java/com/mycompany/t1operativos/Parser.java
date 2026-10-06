@@ -3,7 +3,7 @@ package com.mycompany.t1operativos;
 /**
  * Clase que valida, procesa y traduce las instrucciones ensamblador de la Mini PC.
  *
- * Reconoce las instrucciones del proyecto y los registros AX, BX, CX y DX.
+ * Reconoce las instrucciones del proyecto y los registros AX, BX, CX, DX, AH y AL.
  *
  * @author deislher sánchez funez
  */
@@ -94,7 +94,7 @@ public class Parser {
     }
 
     /**
-     * Valida MOV con un registro de origen o un entero entre -127 y 127.
+     * Valida MOV según su registro destino.
      *
      * @param instruccion partes de la instrucción que se desea validar.
      * @return {@code null} si la instrucción es válida; en caso contrario, un mensaje con la causa del error.
@@ -116,10 +116,36 @@ public class Parser {
                 return "Operador desconocido: \"" + operador + "\". Operador válido: MOV.";
             }
         }
-        if (!validarRegistro(registro)) {
-            return "Registro inválido: \"" + registro + "\". Registros válidos: AX, BX, CX, DX.";
-        }
         String valorTexto = instruccion[1].trim();
+        if ("AH".equals(registro)) {
+            switch (valorTexto) {
+                case "3CH":
+                case "3DH":
+                case "4DH":
+                case "40H":
+                case "41H":
+                    return null;
+                default:
+                    return "AH solo admite 3CH, 3DH, 4DH, 40H y 41H.";
+            }
+        }
+        if ("AL".equals(registro)) {
+            if ("DX".equals(valorTexto) || "AL".equals(valorTexto)) {
+                return null;
+            }
+            return validarAsignacionTexto(valorTexto);
+        }
+        if (!validarRegistro(registro)) {
+            return "Registro inválido: \"" + registro + "\". Registros válidos: AX, BX, CX, DX, AH, AL.";
+        }
+        if ("DX".equals(registro)) {
+            if ("AL".equals(valorTexto)) {
+                return null;
+            }
+            if (valorTexto.contains("\"")) {
+                return validarAsignacionTexto(valorTexto);
+            }
+        }
         if (validarRegistro(valorTexto)) {
             return null;
         }
@@ -127,10 +153,29 @@ public class Parser {
         try {
             valor = Integer.parseInt(valorTexto);
         } catch (NumberFormatException e) {
+            if ("DX".equals(registro)) {
+                return "El origen \"" + valorTexto + "\" debe ser un registro (AX, BX, CX, DX, AL), un entero o texto entre comillas dobles.";
+            }
             return "El origen \"" + valorTexto + "\" debe ser un registro (AX, BX, CX, DX) o un número entero válido.";
         }
         if (valor < -127 || valor > 127) {
             return "El valor " + valor + " está fuera del rango permitido (-127 a 127).";
+        }
+        return null;
+    }
+
+    /**
+     * Valida las comillas de una cadena.
+     *
+     * @param valor texto del operando.
+     * @return null si es válido, o el mensaje de error.
+     */
+    private String validarAsignacionTexto(String valor) {
+        if (valor.length() < 2 || !valor.startsWith("\"") || !valor.endsWith("\"")) {
+            return "El texto debe estar entre comillas dobles.";
+        }
+        if (valor.indexOf('"', 1) != valor.length() - 1) {
+            return "El texto no admite comillas interiores.";
         }
         return null;
     }
@@ -338,7 +383,7 @@ public class Parser {
     }
 
     /**
-     * Comprueba si un registro es reconocido por la Mini PC.
+     * Comprueba un registro de las operaciones generales.
      *
      * @param registro registro que se desea comprobar.
      * @return {@code true} si el registro es AX, BX, CX o DX.
@@ -362,15 +407,24 @@ public class Parser {
      * @return el resultado con la instrucción procesada o un mensaje de error.
      */
     public ResultadoParser procesarInstruccion(String instruccion) {
-        String[] partes = instruccion.trim().split(",", -1);
+        String[] partes = instruccion.trim().split(",", 2);
         String[] partesOperacion = partes[0].trim().replaceAll("\\s+", " ").split(" ");
         String operador = partesOperacion[0];
 
         if (!validarOperador(operador)) {
             return new ResultadoParser(false, null, "Operador desconocido: \"" + operador + "\".");
         }
+        if (!"MOV".equals(operador)) {
+            partes = instruccion.trim().split(",", -1);
+        }
         String error;
         switch (operador) {
+            case "MOV":
+                error = validarInstruccionAsignacion(partes);
+                if (error == null) {
+                    return new ResultadoParser(true, procesarInstruccionAsignacion(partes), null);
+                }
+                return new ResultadoParser(false, null, error);
             case "INC":
             case "DEC":
                 error = validarInstruccionIncremento(partes);
