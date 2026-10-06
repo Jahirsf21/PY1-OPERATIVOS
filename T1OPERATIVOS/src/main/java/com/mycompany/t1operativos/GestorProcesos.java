@@ -16,6 +16,7 @@ public class GestorProcesos {
     private Memoria memoria;
     private Disco disco;
     private CargadorArchivos cargador;
+    private GestorArchivos gestorArchivos;
     private Planificador planificador;
     private Despachador despachador;
     private List<Proceso> procesosRegistrados;
@@ -262,7 +263,14 @@ public class GestorProcesos {
         List<String[]> instrucciones = cargador.cargarArchivo(archivo.getAbsolutePath());
         List<String> errores = cargador.getErrores();
         if (!errores.isEmpty()) {
-            throw new IllegalArgumentException("El archivo contiene errores:\n" + String.join("\n", errores));
+            String mensaje = "El archivo contiene errores:\n";
+            for (int i = 0; i < errores.size(); i++) {
+                if (i > 0) {
+                    mensaje = mensaje + "\n";
+                }
+                mensaje = mensaje + errores.get(i);
+            }
+            throw new IllegalArgumentException(mensaje);
         }
         if (instrucciones.size() > memoria.getTamañoTotal() - memoria.getInicioUsuario()) {
             throw new IllegalArgumentException("El programa no cabe en el espacio de usuario.");
@@ -280,62 +288,10 @@ public class GestorProcesos {
         if (!procesosRegistrados.isEmpty()) {
             id = procesosRegistrados.get(procesosRegistrados.size() - 1).getBCP().getIdProceso() + 1;
         }
-        int posicionIndice = buscarEntradaLibre(disco, archivo.getName());
-        int direccionDisco = buscarEspacioLibre(disco, instrucciones.size());
+        int posicionIndice = gestorArchivos.registrarPrograma(archivo.getName(), instrucciones);
         Proceso proceso = new Proceso(new BCP(id, 1), posicionIndice);
-        for (int i = 0; i < instrucciones.size(); i++) {
-            disco.escribirDatos(direccionDisco + i, instrucciones.get(i));
-        }
-        disco.escribirIndice(posicionIndice, archivo.getName(), direccionDisco, instrucciones.size());
         procesosRegistrados.add(proceso);
         colaTrabajos.add(proceso);
-    }
-
-    /**
-     * Busca una entrada libre sin repetir nombres.
-     *
-     * @param discoDestino disco activo.
-     * @param nombre nombre del archivo.
-     * @return primera entrada libre.
-     */
-    private int buscarEntradaLibre(Disco discoDestino, String nombre) {
-        int libre = -1;
-        for (int posicion = 0; posicion < discoDestino.getInicioDatos(); posicion++) {
-            String[] entrada = discoDestino.leer(posicion);
-            if (entrada == null) {
-                if (libre < 0) {
-                    libre = posicion;
-                }
-            } else if (entrada[0].equalsIgnoreCase(nombre)) {
-                throw new IllegalArgumentException("El archivo " + nombre + " ya existe en el índice del disco.");
-            }
-        }
-        if (libre < 0) {
-            throw new IllegalStateException("El índice del disco no tiene entradas disponibles.");
-        }
-        return libre;
-    }
-
-    /**
-     * Busca un bloque libre en datos de disco.
-     *
-     * @param discoDestino disco activo.
-     * @param cantidad cantidad de instrucciones.
-     * @return inicio del bloque libre.
-     */
-    private int buscarEspacioLibre(Disco discoDestino, int cantidad) {
-        int libres = 0;
-        for (int posicion = discoDestino.getInicioDatos(); posicion < discoDestino.getInicioMemoriaVirtual(); posicion++) {
-            if (discoDestino.leer(posicion) == null) {
-                libres++;
-            } else {
-                libres = 0;
-            }
-            if (libres == cantidad) {
-                return posicion - cantidad + 1;
-            }
-        }
-        throw new IllegalStateException("El disco no tiene un bloque de datos libre para las " + cantidad + " instrucciones del archivo.");
     }
 
     /**
@@ -399,9 +355,9 @@ public class GestorProcesos {
      */
     private String[] getCamposBCP() {
         return new String[]{"idProceso", "estado", "prioridad", "pc", "inicioMemoria", "finMemoria",
-            "ir", "ac", "ax", "bx", "cx", "dx", "flag", "pila1", "pila2", "pila3", "pila4",
+            "ir", "ac", "ax", "bx", "cx", "dx", "ah", "al", "flag", "pila1", "pila2", "pila3", "pila4",
             "pila5", "punteroPila", "cpuActual", "tiempoInicio", "tiempoFinal", "tiempoTotalSegundos",
-            "direccionSiguienteBCP"};
+            "direccionSiguienteBCP", "archivosAbiertos"};
     }
 
     /**
@@ -416,11 +372,13 @@ public class GestorProcesos {
         String[] valores = {String.valueOf(bcp.getIdProceso()), bcp.getEstado(), String.valueOf(bcp.getPrioridad()),
             String.valueOf(bcp.getPc()), String.valueOf(bcp.getInicioMemoria()), String.valueOf(bcp.getFinMemoria()),
             bcp.getIrToString(), String.valueOf(bcp.getAc()), String.valueOf(bcp.getAx()), String.valueOf(bcp.getBx()),
-            String.valueOf(bcp.getCx()), bcp.getDx(), String.valueOf(bcp.esIgual()), String.valueOf(bcp.getValorPila(0)),
+            String.valueOf(bcp.getCx()), bcp.getDx(), String.valueOf(bcp.getAh()), String.valueOf(bcp.getAl()),
+            String.valueOf(bcp.esIgual()), String.valueOf(bcp.getValorPila(0)),
             String.valueOf(bcp.getValorPila(1)), String.valueOf(bcp.getValorPila(2)), String.valueOf(bcp.getValorPila(3)),
             String.valueOf(bcp.getValorPila(4)), String.valueOf(bcp.getPunteroPila()), String.valueOf(bcp.getCpuActual()),
             String.valueOf(bcp.getTiempoInicio()), String.valueOf(bcp.getTiempoFinal()),
-            String.valueOf(bcp.getTiempoTotalSegundos()), String.valueOf(bcp.getDireccionSiguienteBCP())};
+            String.valueOf(bcp.getTiempoTotalSegundos()), String.valueOf(bcp.getDireccionSiguienteBCP()),
+            bcp.getArchivosAbiertos().toString()};
         for (int i = 0; i < nombres.length; i++) {
             memoria.escribirKernel(posicion + i, nombres[i], valores[i]);
         }
@@ -542,6 +500,9 @@ public class GestorProcesos {
                     case "10H":
                         salida = cpu.getDx();
                         break;
+                    case "21H":
+                        ejecutarServicioArchivo();
+                        break;
                     default:
                         throw new IllegalArgumentException("La interrupción INT " + instruccion[1] + " todavía no está implementada.");
                 }
@@ -555,6 +516,33 @@ public class GestorProcesos {
     }
 
     /**
+     * Atiende el servicio de archivos seleccionado en AH.
+     */
+    private void ejecutarServicioArchivo() {
+        BCP bcp = getActual().getBCP();
+        CPU cpu = getCPU();
+        switch (cpu.getAh()) {
+            case 60:
+                gestorArchivos.crearArchivo(cpu.getDx());
+                break;
+            case 61:
+                gestorArchivos.abrirArchivo(bcp, cpu.getDx());
+                break;
+            case 77:
+                cpu.setAl(gestorArchivos.leerArchivo(bcp, cpu.getDx()));
+                break;
+            case 64:
+                gestorArchivos.escribirArchivo(bcp, cpu.getDx(), cpu.getAl());
+                break;
+            case 65:
+                gestorArchivos.eliminarArchivo(bcp, cpu.getDx());
+                break;
+            default:
+                throw new IllegalArgumentException("AH no selecciona un servicio de archivos válido: " + cpu.getAh() + ".");
+        }
+    }
+
+    /**
      * Calcula la dirección de un salto.
      *
      * @param desplazamiento desplazamiento desde PC.
@@ -564,8 +552,7 @@ public class GestorProcesos {
         BCP bcp = getActual().getBCP();
         int destino = getCPU().getPc() + desplazamiento;
         if (destino < bcp.getInicioMemoria() || destino > bcp.getFinMemoria()) {
-            throw new IllegalStateException("Salto fuera de los límites del programa: dirección " + destino
-                    + ". Rango permitido: " + bcp.getInicioMemoria() + " a " + bcp.getFinMemoria() + ".");
+            throw new IllegalStateException("Salto fuera de los límites del programa: dirección " + destino + ". Rango permitido: " + bcp.getInicioMemoria() + " a " + bcp.getFinMemoria() + ".");
         }
         return destino;
     }
@@ -611,6 +598,7 @@ public class GestorProcesos {
             throw new IllegalStateException("El proceso no tiene memoria asignada para liberar.");
         }
         bcp.setEstadoTerminado();
+        gestorArchivos.cerrarArchivos(bcp);
         if (esActual) {
             despachador.retirarActual();
             instruccionPendiente = null;
@@ -631,8 +619,8 @@ public class GestorProcesos {
      * @param tamañoDisco posiciones de disco.
      */
     private void reiniciarRecursos(int tamañoMemoria, int tamañoDisco) {
-        if (tamañoMemoria < 128 || tamañoMemoria % 4 != 0) {
-            throw new IllegalArgumentException("La RAM debe ser al menos 128 y múltiplo de 4.");
+        if (tamañoMemoria < 128) {
+            throw new IllegalArgumentException("La RAM debe ser al menos 128 posiciones.");
         }
         int tamañoKernel = tamañoMemoria / 4;
         int tamañoIndices = tamañoDisco / 20;
@@ -648,6 +636,7 @@ public class GestorProcesos {
         planificador = nuevoPlanificador;
         despachador = nuevoDespachador;
         procesosRegistrados = new ArrayList<>();
+        gestorArchivos = new GestorArchivos(disco, procesosRegistrados);
         colaTrabajos = new ArrayDeque<>();
         instruccionPendiente = null;
         segundosPendientes = 0;

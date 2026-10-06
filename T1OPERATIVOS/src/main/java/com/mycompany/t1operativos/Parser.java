@@ -129,13 +129,10 @@ public class Parser {
                     return "AH solo admite 3CH, 3DH, 4DH, 40H y 41H.";
             }
         }
-        if ("AL".equals(registro)) {
-            if ("DX".equals(valorTexto) || "AL".equals(valorTexto)) {
-                return null;
-            }
-            return validarAsignacionTexto(valorTexto);
+        if ("AL".equals(registro) && "AL".equals(valorTexto)) {
+            return null;
         }
-        if (!validarRegistro(registro)) {
+        if (!validarRegistro(registro) && !"AL".equals(registro)) {
             return "Registro inválido: \"" + registro + "\". Registros válidos: AX, BX, CX, DX, AH, AL.";
         }
         if ("DX".equals(registro)) {
@@ -155,6 +152,9 @@ public class Parser {
         } catch (NumberFormatException e) {
             if ("DX".equals(registro)) {
                 return "El origen \"" + valorTexto + "\" debe ser un registro (AX, BX, CX, DX, AL), un entero o texto entre comillas dobles.";
+            }
+            if ("AL".equals(registro)) {
+                return "AL debe recibir un registro (AX, BX, CX, DX, AL) o un número entero válido.";
             }
             return "El origen \"" + valorTexto + "\" debe ser un registro (AX, BX, CX, DX) o un número entero válido.";
         }

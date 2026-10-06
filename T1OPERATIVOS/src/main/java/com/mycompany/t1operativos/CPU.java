@@ -16,6 +16,8 @@ public class CPU {
     private int bx;
     private int cx;
     private String dx;
+    private int ah;
+    private int al;
     private boolean flag;
 
     /**
@@ -35,9 +37,11 @@ public class CPU {
      * @param bx registro BX.
      * @param cx registro CX.
      * @param dx registro DX.
+     * @param ah registro AH.
+     * @param al registro AL.
      * @param flag resultado de la comparación.
      */
-    public void cargarContexto(int pc, String[] ir, int ac, int ax, int bx, int cx, String dx, boolean flag) {
+    public void cargarContexto(int pc, String[] ir, int ac, int ax, int bx, int cx, String dx, int ah, int al, boolean flag) {
         this.pc = pc;
         this.ir = ir;
         this.ac = ac;
@@ -45,6 +49,8 @@ public class CPU {
         this.bx = bx;
         this.cx = cx;
         this.dx = dx;
+        this.ah = ah;
+        this.al = al;
         this.flag = flag;
     }
 
@@ -70,18 +76,7 @@ public class CPU {
         String operador = ir[0];
         switch (operador) {
             case "MOV":
-                String registro = ir[1];
-                String origen = ir[2];
-                if ("DX".equals(registro) && "DX".equals(origen)) {
-                    break;
-                }
-                int valor;
-                if (esRegistro(origen)) {
-                    valor = leerRegistro(origen);
-                } else {
-                    valor = Integer.parseInt(origen);
-                }
-                escribirRegistro(registro, valor);
+                ejecutarMov(ir[1], ir[2]);
                 break;
             case "LOAD":
                 ac = leerRegistro(ir[1]);
@@ -121,6 +116,63 @@ public class CPU {
             default:
                 throw new IllegalArgumentException("La instrucción " + operador + " todavía no está implementada en la CPU.");
         }
+    }
+
+    /**
+     * Ejecuta un MOV validado por el parser.
+     *
+     * @param registro registro destino.
+     * @param origen registro o valor de origen.
+     */
+    private void ejecutarMov(String registro, String origen) {
+        if ("AH".equals(registro)) {
+            switch (origen) {
+                case "3CH":
+                    ah = 60;
+                    break;
+                case "3DH":
+                    ah = 61;
+                    break;
+                case "4DH":
+                    ah = 77;
+                    break;
+                case "40H":
+                    ah = 64;
+                    break;
+                case "41H":
+                    ah = 65;
+                    break;
+            }
+            return;
+        }
+        if ("AL".equals(registro)) {
+            if (esRegistro(origen)) {
+                al = leerRegistro(origen);
+            } else if (!"AL".equals(origen)) {
+                al = Integer.parseInt(origen);
+            }
+            return;
+        }
+        if ("DX".equals(registro)) {
+            if ("AL".equals(origen)) {
+                dx = Integer.toString(al);
+                return;
+            }
+            if ("DX".equals(origen)) {
+                return;
+            }
+            if (origen.startsWith("\"")) {
+                dx = origen.substring(1, origen.length() - 1);
+                return;
+            }
+        }
+        int valor;
+        if (esRegistro(origen)) {
+            valor = leerRegistro(origen);
+        } else {
+            valor = Integer.parseInt(origen);
+        }
+        escribirRegistro(registro, valor);
     }
 
     /**
@@ -201,6 +253,8 @@ public class CPU {
         bx = 0;
         cx = 0;
         dx = "";
+        ah = 0;
+        al = 0;
         flag = false;
     }
 
@@ -280,6 +334,24 @@ public class CPU {
     }
 
     /**
+     * Obtiene el código de servicio de AH.
+     *
+     * @return el valor de AH.
+     */
+    public int getAh() {
+        return ah;
+    }
+
+    /**
+     * Obtiene el valor de AL.
+     *
+     * @return el valor de AL.
+     */
+    public int getAl() {
+        return al;
+    }
+
+    /**
      * Comprueba el resultado de la última comparación.
      *
      * @return {@code true} si los registros comparados eran iguales.
@@ -298,5 +370,14 @@ public class CPU {
             throw new IllegalArgumentException("DX no puede ser nulo.");
         }
         dx = valor;
+    }
+
+    /**
+     * Asigna un entero a AL.
+     *
+     * @param valor entero que se guardará.
+     */
+    public void setAl(int valor) {
+        al = valor;
     }
 }

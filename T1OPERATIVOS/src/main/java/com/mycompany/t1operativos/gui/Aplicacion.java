@@ -8,12 +8,16 @@ import javax.swing.table.TableColumn;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.DefaultFormatterFactory;
 import javax.swing.text.DocumentFilter;
+import javax.swing.text.NumberFormatter;
 
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.io.File;
+import java.text.DecimalFormat;
+import java.text.ParseException;
 import java.util.Arrays;
 
 /**
@@ -114,8 +118,7 @@ public class Aplicacion extends JFrame {
         JPanel panelMemoria = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
         panelMemoria.add(new JLabel("Memoria total:"));
         selectorMemoria = new JSpinner(new SpinnerNumberModel(256, 128, null, 4));
-        JSpinner.DefaultEditor editorMemoria = (JSpinner.DefaultEditor) selectorMemoria.getEditor();
-        editorMemoria.getTextField().setEditable(false);
+        configurarSelector(selectorMemoria);
         panelMemoria.add(selectorMemoria);
         lblDistribucionMemoria = new JLabel();
         panelMemoria.add(lblDistribucionMemoria);
@@ -125,8 +128,7 @@ public class Aplicacion extends JFrame {
         JPanel panelDisco = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
         panelDisco.add(new JLabel("Disco total:"));
         selectorDisco = new JSpinner(new SpinnerNumberModel(512, 256, null, 4));
-        JSpinner.DefaultEditor editorDisco = (JSpinner.DefaultEditor) selectorDisco.getEditor();
-        editorDisco.getTextField().setEditable(false);
+        configurarSelector(selectorDisco);
         panelDisco.add(selectorDisco);
         lblDistribucionDisco = new JLabel();
         panelDisco.add(lblDistribucionDisco);
@@ -212,6 +214,35 @@ public class Aplicacion extends JFrame {
         listas.add(crearPanelProcesos());
         panel.add(listas, BorderLayout.SOUTH);
         return panel;
+    }
+
+    /**
+     * Permite escribir tamaños enteros desde el mínimo.
+     *
+     * @param selector control de memoria o disco.
+     */
+    private void configurarSelector(JSpinner selector) {
+        JFormattedTextField campo = ((JSpinner.DefaultEditor) selector.getEditor()).getTextField();
+        NumberFormatter formato = new NumberFormatter(new DecimalFormat("0")) {
+            @Override
+            public Object stringToValue(String texto) throws ParseException {
+                int tamaño;
+                try {
+                    tamaño = Integer.parseInt(texto.trim());
+                } catch (NumberFormatException ex) {
+                    throw new ParseException("Debe ingresar un tamaño entero.", 0);
+                }
+                int minimo = (Integer) ((SpinnerNumberModel) selector.getModel()).getMinimum();
+                if (tamaño < minimo) {
+                    throw new ParseException("El tamaño debe ser al menos " + minimo + " posiciones.", 0);
+                }
+                return tamaño;
+            }
+        };
+        formato.setOverwriteMode(false);
+        campo.setFormatterFactory(new DefaultFormatterFactory(formato));
+        campo.setFocusLostBehavior(JFormattedTextField.COMMIT);
+        campo.setEditable(true);
     }
 
     /**
@@ -546,21 +577,37 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Obtiene el tamaño de memoria seleccionado.
+     * Confirma y obtiene el tamaño elegido de RAM.
      *
      * @return la cantidad seleccionada de posiciones de memoria.
      */
     public int getMemoriaSeleccionada() {
-        return (Integer) selectorMemoria.getValue();
+        return leerTamañoSeleccionado(selectorMemoria, "RAM");
     }
 
     /**
-     * Obtiene el tamaño de disco seleccionado.
+     * Confirma y obtiene el tamaño elegido de disco.
      *
      * @return la cantidad seleccionada de posiciones del disco.
      */
     public int getDiscoSeleccionado() {
-        return (Integer) selectorDisco.getValue();
+        return leerTamañoSeleccionado(selectorDisco, "disco");
+    }
+
+    /**
+     * Confirma el tamaño escrito y lo devuelve.
+     *
+     * @param selector control de memoria o disco.
+     * @param nombre nombre del recurso.
+     * @return tamaño confirmado.
+     */
+    private int leerTamañoSeleccionado(JSpinner selector, String nombre) {
+        try {
+            selector.commitEdit();
+        } catch (ParseException ex) {
+            throw new IllegalArgumentException("Tamaño de " + nombre + " inválido: " + ex.getMessage());
+        }
+        return (Integer) selector.getValue();
     }
 
     /**
@@ -629,7 +676,7 @@ public class Aplicacion extends JFrame {
      * Actualiza el texto de la distribución de memoria.
      */
     private void actualizarDistribucionMemoria() {
-        int total = getMemoriaSeleccionada();
+        int total = (Integer) selectorMemoria.getValue();
         int kernel = total / 4;
         int usuario = total - kernel;
         lblDistribucionMemoria.setText("SO: " + kernel + "  | Usuario: " + usuario);
@@ -639,7 +686,7 @@ public class Aplicacion extends JFrame {
      * Actualiza la distribución calculada del disco.
      */
     private void actualizarDistribucionDisco() {
-        int tamañoDisco = getDiscoSeleccionado();
+        int tamañoDisco = (Integer) selectorDisco.getValue();
         int tamañoIndices = tamañoDisco / 20;
         int tamañoMemoriaVirtual = tamañoDisco / 8;
         int tamañoDatos = tamañoDisco - tamañoIndices - tamañoMemoriaVirtual;

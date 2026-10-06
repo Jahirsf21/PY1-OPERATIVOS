@@ -90,7 +90,14 @@ public class Controlador {
                 actualizarVista();
             }
             if (!mensajes.isEmpty()) {
-                mostrarError(String.join("\n", mensajes));
+                String texto = "";
+                for (int i = 0; i < mensajes.size(); i++) {
+                    if (i > 0) {
+                        texto = texto + "\n";
+                    }
+                    texto = texto + mensajes.get(i);
+                }
+                mostrarError(texto);
             }
         } catch (IllegalArgumentException | IllegalStateException ex) {
             if (destino != null && !destino.getProcesosRegistrados().isEmpty()) {
@@ -248,7 +255,15 @@ public class Controlador {
             } else if (disco.esDireccionMemoriaVirtual(posicion)) {
                 contenido = "Memoria virtual (sin uso)";
             } else if (valor != null) {
-                contenido = parser.traducirInstruccion(valor);
+                if (valor.length == 1) {
+                    if (valor[0].isEmpty()) {
+                        contenido = "Archivo vacío";
+                    } else {
+                        contenido = "Dato numérico: " + valor[0];
+                    }
+                } else {
+                    contenido = parser.traducirInstruccion(valor);
+                }
             }
             modelo.addRow(new Object[]{posicion, contenido});
         }
@@ -342,6 +357,8 @@ public class Controlador {
                 + "\nBX: " + bcp.getBx()
                 + "\nCX: " + bcp.getCx()
                 + "\nDX: " + bcp.getDx()
+                + "\nAH: " + bcp.getAh()
+                + "\nAL: " + bcp.getAl()
                 + "\nFlag: " + bcp.esIgual()
                 + "\nPila 1: " + bcp.getValorPila(0)
                 + "\nPila 2: " + bcp.getValorPila(1)
@@ -353,7 +370,8 @@ public class Controlador {
                 + "\nInicio ejecución: " + inicio
                 + "\nFin ejecución: " + fin
                 + "\nDuración: " + bcp.getTiempoTotalSegundos() + " s"
-                + "\nSiguiente BCP: " + bcp.getDireccionSiguienteBCP();
+                + "\nSiguiente BCP: " + bcp.getDireccionSiguienteBCP()
+                + "\nArchivos abiertos: " + bcp.getArchivosAbiertos();
         vista.mostrarBCP(texto);
     }
 

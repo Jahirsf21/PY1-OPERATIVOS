@@ -83,6 +83,34 @@ public class Disco {
     }
 
     /**
+     * Vacía una entrada del índice.
+     *
+     * @param posicion posición de la entrada.
+     */
+    public void liberarIndice(int posicion) {
+        validarDireccion(posicion);
+        if (posicion >= inicioDatos) {
+            throw new IllegalArgumentException("La posición no pertenece al índice del disco.");
+        }
+        disco[posicion] = null;
+    }
+
+    /**
+     * Vacía un bloque de datos.
+     *
+     * @param inicio primera posición del bloque.
+     * @param cantidad posiciones que se liberarán.
+     */
+    public void liberarDatos(int inicio, int cantidad) {
+        if (cantidad <= 0 || inicio < inicioDatos || cantidad > inicioMemoriaVirtual - inicio) {
+            throw new IllegalArgumentException("El bloque debe pertenecer completo a la zona de datos del disco.");
+        }
+        for (int posicion = inicio; posicion < inicio + cantidad; posicion++) {
+            disco[posicion] = null;
+        }
+    }
+
+    /**
      * Comprueba que una dirección pertenezca al disco.
      *
      * @param posicion dirección que se desea comprobar.

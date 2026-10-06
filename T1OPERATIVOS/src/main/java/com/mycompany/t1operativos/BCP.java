@@ -1,6 +1,8 @@
 package com.mycompany.t1operativos;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Bloque de control de proceso.
@@ -20,6 +22,8 @@ public class BCP {
     private int bx;
     private int cx;
     private String dx;
+    private int ah;
+    private int al;
     private boolean flag;
     private int pila1;
     private int pila2;
@@ -32,6 +36,7 @@ public class BCP {
     private LocalDateTime tiempoFinal;
     private long tiempoEmpleadoSegundos;
     private int direccionSiguienteBCP;
+    private List<String> archivosAbiertos;
 
     /**
      * Construye el BCP de un proceso.
@@ -68,6 +73,8 @@ public class BCP {
         this.bx = 0;
         this.cx = 0;
         this.dx = "";
+        this.ah = 0;
+        this.al = 0;
         this.flag = false;
         this.pila1 = 0;
         this.pila2 = 0;
@@ -80,6 +87,7 @@ public class BCP {
         this.tiempoFinal = null;
         this.tiempoEmpleadoSegundos = 0;
         this.direccionSiguienteBCP = -1;
+        this.archivosAbiertos = new ArrayList<>();
     }
 
     /**
@@ -106,7 +114,7 @@ public class BCP {
      * @param cpu CPU que recibirá los registros.
      */
     public void restaurarContexto(CPU cpu) {
-        cpu.cargarContexto(pc, ir, ac, ax, bx, cx, dx, flag);
+        cpu.cargarContexto(pc, ir, ac, ax, bx, cx, dx, ah, al, flag);
     }
 
     /**
@@ -141,6 +149,8 @@ public class BCP {
         this.bx = cpu.getBx();
         this.cx = cpu.getCx();
         this.dx = cpu.getDx();
+        this.ah = cpu.getAh();
+        this.al = cpu.getAl();
         this.flag = cpu.esIgual();
     }
 
@@ -580,6 +590,33 @@ public class BCP {
      */
     public String getDx() {
         return dx;
+    }
+
+    /**
+     * Obtiene el valor guardado de AH.
+     *
+     * @return el valor de AH.
+     */
+    public int getAh() {
+        return ah;
+    }
+
+    /**
+     * Obtiene el entero guardado en AL.
+     *
+     * @return el valor de AL.
+     */
+    public int getAl() {
+        return al;
+    }
+
+    /**
+     * Obtiene los archivos abiertos del proceso.
+     *
+     * @return la misma lista de archivos abiertos.
+     */
+    public List<String> getArchivosAbiertos() {
+        return archivosAbiertos;
     }
 
     /**
