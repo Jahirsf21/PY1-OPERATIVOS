@@ -1,4 +1,4 @@
-package com.mycompany.t1operativos;
+package com.mycompany.t1operativos.modelo;
 
 /**
  * Administra la CPU y los cambios de contexto.

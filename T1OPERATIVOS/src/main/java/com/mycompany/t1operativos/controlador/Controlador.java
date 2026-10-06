@@ -1,6 +1,12 @@
-package com.mycompany.t1operativos;
+package com.mycompany.t1operativos.controlador;
 
-import com.mycompany.t1operativos.gui.Aplicacion;
+import com.mycompany.t1operativos.modelo.BCP;
+import com.mycompany.t1operativos.modelo.Disco;
+import com.mycompany.t1operativos.modelo.GestorProcesos;
+import com.mycompany.t1operativos.modelo.Memoria;
+import com.mycompany.t1operativos.modelo.Parser;
+import com.mycompany.t1operativos.modelo.Proceso;
+import com.mycompany.t1operativos.vista.Aplicacion;
 import java.io.File;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -81,7 +87,7 @@ public class Controlador {
         GestorProcesos destino = gestor;
         try {
             if (destino == null || destino.getProcesosRegistrados().isEmpty()) {
-                destino = new GestorProcesos(vista.getMemoriaSeleccionada(), vista.getDiscoSeleccionado());
+                destino = new GestorProcesos(vista.getMemoriaSeleccionada(), vista.getDiscoSeleccionado(), vista.getMemoriaVirtualSeleccionada());
             }
             int cantidadAnterior = destino.getProcesosRegistrados().size();
             List<String> mensajes = destino.cargarProgramas(archivos);
@@ -133,7 +139,6 @@ public class Controlador {
             ejecucionAutomatica.stop();
             modoAutomatico = false;
             actualizarVista();
-            vista.mostrarEstadoEjecucion("Ejecución detenida con error.");
             vista.imprimirPantalla("Error: " + ex.getMessage());
             mostrarError(ex.getMessage());
         }
@@ -204,7 +209,6 @@ public class Controlador {
         actualizarEstadisticas();
         actualizarBCP();
         actualizarSeleccionProximaInstruccion();
-        actualizarEstadoEjecucion();
         actualizarSolicitudTeclado();
         actualizarControles();
     }
@@ -391,36 +395,6 @@ public class Controlador {
     }
 
     /**
-     * Muestra el estado de ejecución.
-     */
-    private void actualizarEstadoEjecucion() {
-        if (gestor == null || gestor.getProcesosRegistrados().isEmpty()) {
-            vista.mostrarEstadoEjecucion("Sin programas cargados.");
-            return;
-        }
-        Proceso actual = gestor.getActual();
-        Proceso solicitud = gestor.getSolicitudTeclado();
-        String estado;
-        if (actual != null) {
-            estado = "Proceso " + actual.getBCP().getIdProceso() + " ejecutando";
-            String[] instruccion = gestor.getInstruccionPendiente();
-            if (instruccion != null) {
-                estado += ": " + parser.traducirInstruccion(instruccion);
-            }
-        } else if (gestor.puedeEjecutar()) {
-            estado = "CPU libre: hay procesos listos.";
-        } else if (gestor.hayProcesosSinTerminar()) {
-            estado = "Esperando teclado o admisión en memoria.";
-        } else {
-            estado = "Todos los procesos terminaron.";
-        }
-        if (solicitud != null) {
-            estado += " | Proceso " + solicitud.getBCP().getIdProceso() + ": INT 09H, esperando teclado.";
-        }
-        vista.mostrarEstadoEjecucion(estado);
-    }
-
-    /**
      * Abre el aviso del solicitante pendiente.
      */
     private void actualizarSolicitudTeclado() {
@@ -461,8 +435,7 @@ public class Controlador {
         vista.getBtnPasoAPaso().setEnabled(ejecutable && !modoAutomatico);
         vista.getBtnCargarArchivo().setEnabled(true);
         vista.getBtnLimpiar().setEnabled(hayProcesosRegistrados && (!modoAutomatico || !ejecutable));
-        vista.setSelectorMemoriaHabilitado(!hayProcesosRegistrados);
-        vista.setSelectorDiscoHabilitado(!hayProcesosRegistrados);
+        vista.setConfiguracionHabilitada(!hayProcesosRegistrados);
     }
 
     /**

@@ -4,7 +4,7 @@
 
 package com.mycompany.t1operativos;
 
-import com.mycompany.t1operativos.gui.Aplicacion;
+import com.mycompany.t1operativos.vista.Aplicacion;
 
 /**
  * Inicia la interfaz gráfica de la Mini PC.

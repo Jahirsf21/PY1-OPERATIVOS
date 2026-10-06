@@ -1,6 +1,6 @@
-package com.mycompany.t1operativos.gui;
+package com.mycompany.t1operativos.vista;
 
-import com.mycompany.t1operativos.Controlador;
+import com.mycompany.t1operativos.controlador.Controlador;
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
@@ -15,6 +15,8 @@ import javax.swing.text.NumberFormatter;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 import java.text.DecimalFormat;
 import java.text.ParseException;
@@ -35,6 +37,10 @@ public class Aplicacion extends JFrame {
     private JButton btnEstadisticas;
     /** Modal de estadísticas. */
     private JDialog ventanaEstadisticas;
+    /** Botón de configuración. */
+    private JButton btnConfigurarSimulador;
+    /** Modal de configuración. */
+    private JDialog ventanaConfiguracion;
 
     private JTable tablaMemoria;
     private JTable tablaDisco;
@@ -49,7 +55,8 @@ public class Aplicacion extends JFrame {
     private JLabel lblDistribucionMemoria;
     private JSpinner selectorDisco;
     private JLabel lblDistribucionDisco;
-    private JLabel lblEstadoEjecucion;
+    /** Tamaño elegido de memoria virtual. */
+    private JSpinner selectorMemoriaVirtual;
     private JTextArea pantalla;
     private int inicioEntradaConsola = -1;
     private boolean actualizandoConsola;
@@ -85,6 +92,16 @@ public class Aplicacion extends JFrame {
         ventanaEstadisticas.setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
         ventanaEstadisticas.setContentPane(crearPanelEstadisticas());
         ventanaEstadisticas.setSize(650, 350);
+        ventanaConfiguracion = new JDialog(this, "Configurar Simulador", true);
+        ventanaConfiguracion.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        ventanaConfiguracion.setContentPane(crearPanelConfiguracion());
+        ventanaConfiguracion.setSize(620, 260);
+        ventanaConfiguracion.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent evento) {
+                confirmarConfiguracion();
+            }
+        });
     }
 
     /**
@@ -114,38 +131,85 @@ public class Aplicacion extends JFrame {
         btnCargarArchivo = new JButton("Cargar archivos");
         btnCargarArchivo.addActionListener(e -> abrirSelectorArchivos());
         panelCargarArchivo.add(btnCargarArchivo);
-
-        JPanel panelMemoria = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        panelMemoria.add(new JLabel("Memoria total:"));
-        selectorMemoria = new JSpinner(new SpinnerNumberModel(256, 128, null, 4));
-        configurarSelector(selectorMemoria);
-        panelMemoria.add(selectorMemoria);
-        lblDistribucionMemoria = new JLabel();
-        panelMemoria.add(lblDistribucionMemoria);
-        selectorMemoria.addChangeListener(e -> actualizarDistribucionMemoria());
-        actualizarDistribucionMemoria();
-
-        JPanel panelDisco = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        panelDisco.add(new JLabel("Disco total:"));
-        selectorDisco = new JSpinner(new SpinnerNumberModel(512, 256, null, 4));
-        configurarSelector(selectorDisco);
-        panelDisco.add(selectorDisco);
-        lblDistribucionDisco = new JLabel();
-        panelDisco.add(lblDistribucionDisco);
-        selectorDisco.addChangeListener(e -> actualizarDistribucionDisco());
-        actualizarDistribucionDisco();
+        btnConfigurarSimulador = new JButton("Configurar Simulador");
+        btnConfigurarSimulador.addActionListener(e -> mostrarConfiguracion());
+        panelCargarArchivo.add(btnConfigurarSimulador);
 
         panel.add(panelBotonesAccion);
         panel.add(panelCargarArchivo);
-        panel.add(panelMemoria);
-        panel.add(panelDisco);
-
-        JPanel panelEjecucion = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
-        lblEstadoEjecucion = new JLabel("Sin programa cargado.");
-        panelEjecucion.add(lblEstadoEjecucion);
-        panel.add(panelEjecucion);
 
         return panel;
+    }
+
+    /**
+     * Crea los controles de configuración.
+     *
+     * @return panel de tamaños y distribución.
+     */
+    private JPanel crearPanelConfiguracion() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        JPanel campos = new JPanel(new GridLayout(3, 2, 10, 10));
+        selectorMemoria = new JSpinner(new SpinnerNumberModel(256, 128, null, 4));
+        selectorDisco = new JSpinner(new SpinnerNumberModel(512, 256, null, 4));
+        int tamañoDisco = (Integer) selectorDisco.getValue();
+        int maximoVirtual = tamañoDisco - tamañoDisco / 20;
+        selectorMemoriaVirtual = new JSpinner(new SpinnerNumberModel(64, 0, maximoVirtual, 4));
+        configurarSelector(selectorMemoria);
+        configurarSelector(selectorDisco);
+        configurarSelector(selectorMemoriaVirtual);
+        campos.add(new JLabel("Memoria principal (RAM):"));
+        campos.add(selectorMemoria);
+        campos.add(new JLabel("Disco:"));
+        campos.add(selectorDisco);
+        campos.add(new JLabel("Memoria virtual:"));
+        campos.add(selectorMemoriaVirtual);
+        panel.add(campos, BorderLayout.NORTH);
+
+        JPanel distribucion = new JPanel(new GridLayout(2, 1, 0, 5));
+        lblDistribucionMemoria = new JLabel();
+        lblDistribucionDisco = new JLabel();
+        distribucion.add(lblDistribucionMemoria);
+        distribucion.add(lblDistribucionDisco);
+        panel.add(distribucion, BorderLayout.CENTER);
+        selectorMemoria.addChangeListener(e -> actualizarDistribucionMemoria());
+        selectorDisco.addChangeListener(e -> {
+            actualizarLimiteMemoriaVirtual();
+            actualizarDistribucionDisco();
+        });
+        selectorMemoriaVirtual.addChangeListener(e -> actualizarDistribucionDisco());
+        actualizarDistribucionMemoria();
+        actualizarDistribucionDisco();
+
+        JPanel botones = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton aceptar = new JButton("Aceptar");
+        aceptar.addActionListener(e -> confirmarConfiguracion());
+        botones.add(aceptar);
+        panel.add(botones, BorderLayout.SOUTH);
+        ventanaConfiguracion.getRootPane().setDefaultButton(aceptar);
+        return panel;
+    }
+
+    /**
+     * Muestra la configuración.
+     */
+    private void mostrarConfiguracion() {
+        ventanaConfiguracion.setLocationRelativeTo(this);
+        ventanaConfiguracion.setVisible(true);
+    }
+
+    /**
+     * Confirma los tamaños y cierra el modal.
+     */
+    private void confirmarConfiguracion() {
+        try {
+            getMemoriaSeleccionada();
+            getDiscoSeleccionado();
+            getMemoriaVirtualSeleccionada();
+            ventanaConfiguracion.setVisible(false);
+        } catch (IllegalArgumentException ex) {
+            JOptionPane.showMessageDialog(ventanaConfiguracion, ex.getMessage(), "Configuración inválida", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     /**
@@ -217,9 +281,9 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Permite escribir tamaños enteros desde el mínimo.
+     * Permite escribir tamaños enteros dentro de sus límites.
      *
-     * @param selector control de memoria o disco.
+     * @param selector control del recurso.
      */
     private void configurarSelector(JSpinner selector) {
         JFormattedTextField campo = ((JSpinner.DefaultEditor) selector.getEditor()).getTextField();
@@ -235,6 +299,10 @@ public class Aplicacion extends JFrame {
                 int minimo = (Integer) ((SpinnerNumberModel) selector.getModel()).getMinimum();
                 if (tamaño < minimo) {
                     throw new ParseException("El tamaño debe ser al menos " + minimo + " posiciones.", 0);
+                }
+                Integer maximo = (Integer) ((SpinnerNumberModel) selector.getModel()).getMaximum();
+                if (maximo != null && tamaño > maximo) {
+                    throw new ParseException("El tamaño no puede superar " + maximo + " posiciones.", 0);
                 }
                 return tamaño;
             }
@@ -554,15 +622,6 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Actualiza el texto del estado de ejecución.
-     *
-     * @param estado texto del estado o de la instrucción actual.
-     */
-    public void mostrarEstadoEjecucion(String estado) {
-        lblEstadoEjecucion.setText(estado);
-    }
-
-    /**
      * Limpia la consola y deshabilita la entrada.
      */
     public void limpiarConsola() {
@@ -595,9 +654,18 @@ public class Aplicacion extends JFrame {
     }
 
     /**
+     * Confirma y obtiene la memoria virtual elegida.
+     *
+     * @return cantidad de posiciones reservadas.
+     */
+    public int getMemoriaVirtualSeleccionada() {
+        return leerTamañoSeleccionado(selectorMemoriaVirtual, "memoria virtual");
+    }
+
+    /**
      * Confirma el tamaño escrito y lo devuelve.
      *
-     * @param selector control de memoria o disco.
+     * @param selector control del recurso.
      * @param nombre nombre del recurso.
      * @return tamaño confirmado.
      */
@@ -622,21 +690,15 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Habilita o deshabilita el selector de memoria.
+     * Habilita o deshabilita la configuración.
      *
      * @param habilitado {@code true} para permitir cambiar el tamaño.
      */
-    public void setSelectorMemoriaHabilitado(boolean habilitado) {
+    public void setConfiguracionHabilitada(boolean habilitado) {
+        btnConfigurarSimulador.setEnabled(habilitado);
         selectorMemoria.setEnabled(habilitado);
-    }
-
-    /**
-     * Habilita o deshabilita el selector de disco.
-     *
-     * @param habilitado {@code true} para permitir cambiar el tamaño.
-     */
-    public void setSelectorDiscoHabilitado(boolean habilitado) {
         selectorDisco.setEnabled(habilitado);
+        selectorMemoriaVirtual.setEnabled(habilitado);
     }
 
     /**
@@ -683,14 +745,28 @@ public class Aplicacion extends JFrame {
     }
 
     /**
-     * Actualiza la distribución calculada del disco.
+     * Ajusta el máximo de la memoria virtual.
+     */
+    private void actualizarLimiteMemoriaVirtual() {
+        int tamañoDisco = (Integer) selectorDisco.getValue();
+        int maximo = tamañoDisco - tamañoDisco / 20;
+        SpinnerNumberModel modelo = (SpinnerNumberModel) selectorMemoriaVirtual.getModel();
+        modelo.setMaximum(maximo);
+        if ((Integer) selectorMemoriaVirtual.getValue() > maximo) {
+            selectorMemoriaVirtual.setValue(maximo);
+        }
+    }
+
+    /**
+     * Actualiza la distribución elegida del disco.
      */
     private void actualizarDistribucionDisco() {
         int tamañoDisco = (Integer) selectorDisco.getValue();
         int tamañoIndices = tamañoDisco / 20;
-        int tamañoMemoriaVirtual = tamañoDisco / 8;
+        int tamañoMemoriaVirtual = (Integer) selectorMemoriaVirtual.getValue();
         int tamañoDatos = tamañoDisco - tamañoIndices - tamañoMemoriaVirtual;
-        lblDistribucionDisco.setText("Índices: " + tamañoIndices + "  | Datos: " + tamañoDatos + "  | Memoria virtual: " + tamañoMemoriaVirtual);
+        int maximoVirtual = tamañoDisco - tamañoIndices;
+        lblDistribucionDisco.setText("Índices: " + tamañoIndices + "  | Programas y datos: " + tamañoDatos + "  | Máximo virtual: " + maximoVirtual);
     }
 
     /**

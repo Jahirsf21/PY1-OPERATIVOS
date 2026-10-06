@@ -1,4 +1,4 @@
-package com.mycompany.t1operativos;
+package com.mycompany.t1operativos.modelo;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;

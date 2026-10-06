@@ -1,4 +1,4 @@
-package com.mycompany.t1operativos;
+package com.mycompany.t1operativos.modelo;
 
 /**
  * Almacena instrucciones y atributos del BCP en sus respectivas zonas.

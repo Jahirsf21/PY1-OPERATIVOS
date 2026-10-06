@@ -1,4 +1,4 @@
-package com.mycompany.t1operativos;
+package com.mycompany.t1operativos.modelo;
 
 /**
  * Clase para representar el resultado del análisis de una instrucción ensamblador.

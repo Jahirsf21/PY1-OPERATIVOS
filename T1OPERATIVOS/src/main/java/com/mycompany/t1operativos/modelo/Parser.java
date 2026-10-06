@@ -1,4 +1,4 @@
-package com.mycompany.t1operativos;
+package com.mycompany.t1operativos.modelo;
 
 /**
  * Clase que valida, procesa y traduce las instrucciones ensamblador de la Mini PC.

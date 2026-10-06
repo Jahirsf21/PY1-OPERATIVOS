@@ -1,4 +1,4 @@
-package com.mycompany.t1operativos;
+package com.mycompany.t1operativos.modelo;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,9 +29,10 @@ public class GestorProcesos {
      *
      * @param tamañoMemoria posiciones de RAM.
      * @param tamañoDisco posiciones de disco.
+     * @param tamañoMemoriaVirtual posiciones reservadas en disco.
      */
-    public GestorProcesos(int tamañoMemoria, int tamañoDisco) {
-        reiniciarRecursos(tamañoMemoria, tamañoDisco);
+    public GestorProcesos(int tamañoMemoria, int tamañoDisco, int tamañoMemoriaVirtual) {
+        reiniciarRecursos(tamañoMemoria, tamañoDisco, tamañoMemoriaVirtual);
     }
 
     /**
@@ -153,7 +154,7 @@ public class GestorProcesos {
      * Reinicia la simulación conservando capacidades.
      */
     public void limpiar() {
-        reiniciarRecursos(memoria.getTamañoTotal(), disco.getTamañoTotal());
+        reiniciarRecursos(memoria.getTamañoTotal(), disco.getTamañoTotal(), disco.getTamañoTotal() - disco.getInicioMemoriaVirtual());
     }
 
     /**
@@ -617,14 +618,17 @@ public class GestorProcesos {
      *
      * @param tamañoMemoria posiciones de RAM.
      * @param tamañoDisco posiciones de disco.
+     * @param tamañoMemoriaVirtual posiciones reservadas en disco.
      */
-    private void reiniciarRecursos(int tamañoMemoria, int tamañoDisco) {
+    private void reiniciarRecursos(int tamañoMemoria, int tamañoDisco, int tamañoMemoriaVirtual) {
         if (tamañoMemoria < 128) {
             throw new IllegalArgumentException("La RAM debe ser al menos 128 posiciones.");
         }
         int tamañoKernel = tamañoMemoria / 4;
         int tamañoIndices = tamañoDisco / 20;
-        int tamañoMemoriaVirtual = tamañoDisco / 8;
+        if (tamañoMemoriaVirtual < 0 || tamañoMemoriaVirtual > tamañoDisco - tamañoIndices) {
+            throw new IllegalArgumentException("La memoria virtual debe estar entre 0 y " + (tamañoDisco - tamañoIndices) + " posiciones.");
+        }
         Memoria nuevaMemoria = new Memoria(tamañoMemoria, tamañoKernel);
         Disco nuevoDisco = new Disco(tamañoDisco, tamañoIndices, tamañoDisco - tamañoMemoriaVirtual);
         CargadorArchivos nuevoCargador = new CargadorArchivos();

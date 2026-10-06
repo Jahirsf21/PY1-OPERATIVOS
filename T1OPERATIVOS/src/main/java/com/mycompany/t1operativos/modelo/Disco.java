@@ -1,4 +1,4 @@
-package com.mycompany.t1operativos;
+package com.mycompany.t1operativos.modelo;
 
 /**
  * Almacena archivos en el disco.
@@ -21,11 +21,8 @@ public class Disco {
         if (tamañoTotal < 256) {
             throw new IllegalArgumentException("El disco debe tener al menos 256 posiciones.");
         }
-        if (inicioDatos <= 0 || inicioDatos >= inicioMemoriaVirtual) {
+        if (inicioDatos <= 0 || inicioDatos > inicioMemoriaVirtual || inicioMemoriaVirtual > tamañoTotal) {
             throw new IllegalArgumentException("La distribución del disco debe separar índice, datos y memoria virtual.");
-        }
-        if (tamañoTotal - inicioMemoriaVirtual != tamañoTotal / 8) {
-            throw new IllegalArgumentException("La memoria virtual debe ocupar el 12,5% del disco");
         }
         this.disco = new String[tamañoTotal][];
         this.inicioDatos = inicioDatos;
