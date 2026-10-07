@@ -261,9 +261,9 @@ public class Controlador {
             } else if (valor != null) {
                 if (valor.length == 1) {
                     if (valor[0].isEmpty()) {
-                        contenido = "Archivo vacío";
+                        contenido = " ";
                     } else {
-                        contenido = "Dato numérico: " + valor[0];
+                        contenido = valor[0];
                     }
                 } else {
                     contenido = parser.traducirInstruccion(valor);
